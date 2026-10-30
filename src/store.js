@@ -254,5 +254,9 @@ export function parseReport(value) {
   if (every !== undefined && (!Number.isInteger(every) || every < 60 || every > 86400)) return null;
   // The exact model (M5Stack boards, from 1.9.4): a short name, nothing else.
   if (model !== undefined && (typeof model !== "string" || !/^[A-Za-z0-9 .+()-]{1,39}$/.test(model))) return null;
-  return { v, board, hashrate, ...(every !== undefined ? { every } : {}), ...(model !== undefined ? { model } : {}) };
+  // 1.9.4 also sends a model that only repeats its board ("M5StickC Plus2" for
+  // m5stickc-plus2): it tells nothing more.
+  const plain = (x) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const tells = model !== undefined && plain(model) !== plain(board);
+  return { v, board, hashrate, ...(every !== undefined ? { every } : {}), ...(tells ? { model } : {}) };
 }

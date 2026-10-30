@@ -174,6 +174,7 @@ describe("stats store", () => {
     assert.deepEqual(parseReport({ v: "1.9.0", board: "nerdnos", hashrate: 1.5e11 }), { v: "1.9.0", board: "nerdnos", hashrate: 1.5e11 });
     assert.deepEqual(parseReport({ v: "1.9.2", board: "x", hashrate: 1, every: 300 }), { v: "1.9.2", board: "x", hashrate: 1, every: 300 });
     assert.deepEqual(parseReport({ v: "1.9.4", board: "x", hashrate: 1, every: 300, model: "M5Stack Core2" }).model, "M5Stack Core2");
+    assert.equal("model" in parseReport({ v: "1.9.4", board: "m5stickc-plus2", hashrate: 1, model: "M5StickC Plus2" }), false);
     for (const model of ["", "<script>", "x".repeat(40), 5]) assert.equal(parseReport({ v: "1.9.4", board: "x", hashrate: 1, model }), null, String(model));
     for (const bad of [null, {}, { v: "1.9", board: "x", hashrate: 1 }, { v: "1.9.0", board: "Bad Board", hashrate: 1 },
       { v: "1.9.0", board: "x", hashrate: 0 }, { v: "1.9.0", board: "x", hashrate: 1e14 }, { v: "1.9.0", board: "x", hashrate: "1e6" },
