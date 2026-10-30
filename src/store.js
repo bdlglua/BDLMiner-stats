@@ -33,9 +33,9 @@ export class Store {
     // add() ended their previous reports, and while the reports of miners
     // still on 1.9.0 and 1.9.1 overlapped): they are dropped once, after all
     // of those miners moved to 1.9.2.
-    if (this.get("samples-reset") !== "2") {
-      sql.exec("DELETE FROM samples");
-      this.put("samples-reset", "2");
+    if (this.get("samples-reset") !== "3") {
+      sql.exec("DELETE FROM samples WHERE t <= ?", 1793391000000);  // 2026-10-30 21:10 Paris time
+      this.put("samples-reset", "3");
     }
     this.addresses = new Map();  // address -> {count, until}: in memory only, never stored
     // Which address sent each live report, in memory only (lost on a restart
