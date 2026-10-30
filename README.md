@@ -1,7 +1,8 @@
 # BDLMiner stats
 
 The total hashrate of the [BDLMiner](https://github.com/bdlglua/BDLMinerV1) miners
-that share it, and a private page to follow it.
+that share it, and a public page to follow it:
+**<https://bdlminer-stats.bdlminer-bot.workers.dev/>**
 
 Miners with the *Share my hashrate anonymously* setting (on by default since
 BDLMiner 1.9.0) post a report once an hour:
@@ -22,11 +23,12 @@ of reports (30 an hour per address); it is never stored.
 | Path | Access | What |
 |---|---|---|
 | `POST /report` | Miners | One report; 204 when stored, 400 when malformed, 429 over the limit |
-| `GET /` | Password | The statistics page: total hashrate, miners, average, best hour, 7-day chart, by board and version |
-| `GET /api/summary` | Password | The same as JSON |
+| `GET /` | Everyone | The statistics page: total hashrate, miners, average, best hour, 7-day chart, by board and version |
+| `GET /api/summary` | Everyone | The same as JSON (cached a minute, readable from any site) |
 
-The page uses HTTP Basic authentication with the `STATS_PASSWORD` secret (any user
-name); without it, the page stays closed.
+The figures hold nothing about any one miner. To make them private, set a
+`STATS_PASSWORD` secret: the page and the JSON then ask for it (HTTP Basic, any user
+name).
 
 The figures are indicative: only the miners that share their hashrate are counted,
 and the reports cannot be authenticated (the firmware is open source).
@@ -36,8 +38,8 @@ and the reports cannot be authenticated (the firmware is open source).
 1. **Cloudflare**: the same free account as any other Worker; note the *Account ID* and
    create an API token from the *Edit Cloudflare Workers* template.
 2. **GitHub** (Settings → Secrets and variables → Actions → secrets):
-   `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `STATS_PASSWORD`, the password
-   of the page.
+   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (and `STATS_PASSWORD` only for a
+   private page).
 3. Run the **Test and deploy** workflow, or push to `main`. The Worker answers at
    `https://bdlminer-stats.<your-subdomain>.workers.dev/`, the address built into the
    firmware (`STATS_URL` in BDLMinerV1's `src/share.h`).

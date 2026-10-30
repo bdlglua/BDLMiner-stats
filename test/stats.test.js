@@ -85,7 +85,19 @@ describe("stats worker", () => {
     assert.equal(store.summary().miners, 1);
   });
 
-  it("keeps the page and the summary behind the password", async () => {
+  it("shows the page and the summary to everyone", async () => {
+    delete env.STATS_PASSWORD;
+    await post(report(1e6));
+    const page = await get("/");
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /Hashrate total/);
+    assert.equal(page.headers.get("Cache-Control"), "public, max-age=60");
+    const summary = await get("/api/summary");
+    assert.equal(summary.headers.get("Access-Control-Allow-Origin"), "*");
+    assert.equal((await summary.json()).miners, 1);
+  });
+
+  it("keeps the page and the summary behind a password when one is set", async () => {
     await post(report(1e6));
     for (const path of ["/", "/api/summary"]) {
       const locked = await get(path);
@@ -102,10 +114,11 @@ describe("stats worker", () => {
     assert.equal((await get("/elsewhere", "s3cret")).status, 404);
   });
 
-  it("stays closed without a password set", () => {
+  it("checks the password only when one is set", () => {
     const request = new Request("https://x/", { headers: { Authorization: "Basic " + btoa("me:") } });
-    assert.equal(authorized(request, undefined), false);
-    assert.equal(authorized(request, ""), false);
+    assert.equal(authorized(new Request("https://x/"), undefined), true);
+    assert.equal(authorized(request, ""), true);
+    assert.equal(authorized(request, "p"), false);
     assert.equal(authorized(new Request("https://x/", { headers: { Authorization: "Basic !!!" } }), "p"), false);
   });
 });

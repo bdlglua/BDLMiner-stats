@@ -6,7 +6,7 @@ export const PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
+<meta name="description" content="Hashrate total des miners Bitcoin BDLMiner qui le partagent, en direct.">
 <title>BDLMiner · Statistiques</title>
 <style>
   :root { --bg: #0a0d12; --panel: #12171f; --line: #1f2733; --text: #eef1f5; --muted: #8b95a3; --accent: #f7931a; }
@@ -35,6 +35,7 @@ export const PAGE = `<!doctype html>
   td.num, th.num { text-align: right; }
   .empty { color: var(--muted); }
   footer { color: var(--muted); font-size: 12px; margin-top: 16px; }
+  footer a { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -57,7 +58,7 @@ export const PAGE = `<!doctype html>
     <section><h2>Par carte</h2><table id="boards"></table></section>
     <section><h2>Par version</h2><table id="versions"></table></section>
   </div>
-  <footer>Seuls les miners qui partagent leur hashrate (réglage « Partager mon hashrate anonymement ») sont comptés : un rapport par heure, avec la version, la carte et le hashrate. Mise à jour toutes les minutes.</footer>
+  <footer>Seuls les miners qui partagent leur hashrate (réglage « Partager mon hashrate anonymement ») sont comptés : un rapport par heure, avec la version, la carte et le hashrate, rien d'autre. Mise à jour toutes les minutes. <a href="https://github.com/bdlglua/BDLMinerV1">BDLMiner V1</a> · <a href="https://github.com/bdlglua/BDLMiner-stats">code de cette page</a> · <a href="/api/summary">données JSON</a></footer>
 </main>
 <script>
 const UNITS = ["H/s", "kH/s", "MH/s", "GH/s", "TH/s", "PH/s", "EH/s"];

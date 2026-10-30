@@ -1,6 +1,7 @@
 // BDLMiner statistics: miners that share their hashrate (the "Share my
 // hashrate anonymously" setting) post a report every hour to /report; the
-// private page / shows the totals, behind a password (STATS_PASSWORD).
+// public page / shows the totals. They hold nothing about any one miner; a
+// STATS_PASSWORD, if set, makes the page private again.
 
 import { parseReport } from "./store.js";
 import { PAGE } from "./page.js";
@@ -11,10 +12,9 @@ function store(env) {
   return env.STORE.get(env.STORE.idFromName("global"));
 }
 
-// HTTP Basic: the browser asks once and remembers. Without a password set,
-// the page stays closed.
+// HTTP Basic, only when a password is set: the browser asks once and remembers.
 export function authorized(request, password) {
-  if (!password) return false;
+  if (!password) return true;
   const header = request.headers.get("Authorization") ?? "";
   if (!header.startsWith("Basic ")) return false;
   let decoded;
@@ -34,7 +34,14 @@ const LOCKED = () => new Response("Password required", {
   status: 401, headers: { "WWW-Authenticate": 'Basic realm="BDLMiner stats", charset="UTF-8"' },
 });
 
-const PRIVATE = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex", "X-Frame-Options": "DENY" };
+// Public figures change once a minute at most: a short cache spares the
+// Durable Object when many people look.
+function headers(env, type) {
+  const common = { "X-Frame-Options": "DENY", ...(type ? { "Content-Type": type } : {}) };
+  return env.STATS_PASSWORD
+    ? { ...common, "Cache-Control": "no-store", "X-Robots-Tag": "noindex" }
+    : { ...common, "Cache-Control": "public, max-age=60", "Access-Control-Allow-Origin": "*" };
+}
 
 export default {
   async fetch(request, env) {
@@ -60,8 +67,8 @@ export default {
     if (url.pathname === "/" || url.pathname === "/api/summary") {
       if (request.method !== "GET") return new Response("GET only", { status: 405 });
       if (!authorized(request, env.STATS_PASSWORD)) return LOCKED();
-      if (url.pathname === "/") return new Response(PAGE, { headers: { "Content-Type": "text/html; charset=utf-8", ...PRIVATE } });
-      return Response.json(await store(env).summary(), { headers: PRIVATE });
+      if (url.pathname === "/") return new Response(PAGE, { headers: headers(env, "text/html; charset=utf-8") });
+      return Response.json(await store(env).summary(), { headers: headers(env) });
     }
 
     return new Response("Not found", { status: 404 });
