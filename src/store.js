@@ -29,6 +29,12 @@ export class Store {
     sql.exec("CREATE TABLE IF NOT EXISTS samples (t INTEGER PRIMARY KEY, hashrate REAL NOT NULL, miners REAL NOT NULL, boards TEXT NOT NULL)");
     this.live = JSON.parse(this.get("live") ?? "[]");
     this.migrate();
+    // The samples of the first evening counted updating miners twice (before
+    // add() ended their previous reports): they are dropped once.
+    if (this.get("samples-reset") === null) {
+      sql.exec("DELETE FROM samples");
+      this.put("samples-reset", "1");
+    }
     this.addresses = new Map();  // address -> {count, until}: in memory only, never stored
     // Which address sent each live report, in memory only (lost on a restart
     // of the Durable Object, never stored): see add().
@@ -163,9 +169,24 @@ export class Store {
 
     const samples = this.sql.exec("SELECT t, hashrate, miners, boards FROM samples WHERE t > ? ORDER BY t", now - 7 * DAY).toArray();
     // Reports carry no identifier, so the miners of a board that went offline
-    // are estimated: the most seen at once over 7 days, minus those online now.
+    // are estimated: how many ran together over 7 days, minus those online
+    // now. "Together" is the fewest seen during an hour (a full hour of
+    // samples), so that a miner counted twice for a few minutes while it
+    // restarts does not add one; the most of those minimums is kept.
     const peak = { ...online };
-    for (const s of samples) for (const [b, n] of Object.entries(JSON.parse(s.boards))) peak[b] = Math.max(peak[b] ?? 0, n);
+    const perHour = new Map();
+    for (const s of samples) {
+      const h = Math.floor((s.t - 1) / HOUR);
+      const e = perHour.get(h) ?? { n: 0, boards: [] };
+      e.n++;
+      e.boards.push(JSON.parse(s.boards));
+      perHour.set(h, e);
+    }
+    for (const { n, boards } of perHour.values()) {
+      if (n < HOUR / SAMPLE) continue;
+      for (const b of new Set(boards.flatMap(Object.keys)))
+        peak[b] = Math.max(peak[b] ?? 0, Math.min(...boards.map((x) => x[b] ?? 0)));
+    }
     const fleet = Object.keys(peak).map((board) => ({ board, online: online[board] ?? 0, offline: Math.max(0, peak[board] - (online[board] ?? 0)) }))
       .filter((f) => f.online || f.offline)
       .sort((a, b) => b.online - a.online || b.offline - a.offline || a.board.localeCompare(b.board));

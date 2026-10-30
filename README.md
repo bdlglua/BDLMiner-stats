@@ -20,7 +20,8 @@ the timeline without overlapping, so the total over the last 5 minutes is the cu
 hashrate, and the number of reports covering *now* the miners online. Every 5 minutes
 that total becomes a sample (kept 35 days): the 24-hour chart, the hourly history and
 the best hour come from them. Per board, the miners gone offline are estimated as the
-most seen at once over 7 days minus those online. The sender's network address only
+most that ran together through a full hour over 7 days (the fewest seen during that
+hour, so that a miner counted twice for a moment does not add one), minus those online. The sender's network address only
 limits the number of reports (400 an hour per address) and, in memory, recognises a
 miner that restarts on a new version (same address, same board, another version): its
 previous report then ends, so that it is not counted twice. It is never stored.

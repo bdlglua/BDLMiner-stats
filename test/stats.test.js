@@ -62,9 +62,10 @@ describe("stats store", () => {
 
   it("drops a miner within 5 minutes of its last report, and counts it offline", () => {
     feed(store,
-      { from: T - HOUR, to: T - 30 * MIN, period: 5 * MIN + 2000, r: report(1e11, "nerdnos") },
-      { from: T - HOUR + 1000, to: T, period: 5 * MIN + 2000, r: report(1e11, "nerdnos"), address: "b" },
-      { from: T - HOUR + 2000, to: T, period: 5 * MIN + 2000, r: report(1e6) , address: "c" });
+      // Ran together for over an hour, then one stopped 30 minutes ago.
+      { from: T - 2 * HOUR, to: T - 30 * MIN, period: 5 * MIN + 2000, r: report(1e11, "nerdnos") },
+      { from: T - 2 * HOUR + 1000, to: T, period: 5 * MIN + 2000, r: report(1e11, "nerdnos"), address: "b" },
+      { from: T - 2 * HOUR + 2000, to: T, period: 5 * MIN + 2000, r: report(1e6) , address: "c" });
     const s = store.summary(T);
     assert.equal(s.miners, 2);
     near(s.hashrate, 1e11 + 1e6);
@@ -72,6 +73,15 @@ describe("stats store", () => {
       { board: "nerdnos", online: 1, offline: 1 },
       { board: "m5stickc-plus2", online: 1, offline: 0 },
     ]);
+  });
+
+  it("estimates the miners gone offline from full hours, not from a moment counted twice", () => {
+    // Two ESP32 for two hours, one stops; a third shows up twice for 10 minutes only.
+    feed(store,
+      { from: T - 3 * HOUR, to: T, period: 5 * MIN + 2000, r: report(1e6, "esp32-headless"), address: "a" },
+      { from: T - 3 * HOUR + 1000, to: T - HOUR, period: 5 * MIN + 2000, r: report(1e6, "esp32-headless"), address: "b" },
+      { from: T - 2 * HOUR + 30 * MIN, to: T - 2 * HOUR + 40 * MIN, period: MIN, r: report(1e6, "m5stickc-plus2"), address: "c" });
+    assert.deepEqual(store.summary(T).fleet, [{ board: "esp32-headless", online: 1, offline: 1 }]);
   });
 
   it("does not count a miner twice when it restarts on a new version", () => {
