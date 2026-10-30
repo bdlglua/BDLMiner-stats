@@ -73,7 +73,7 @@ export class Store {
       if (this.addresses.size > 10000) for (const [a, s] of this.addresses) if (s.until <= now) this.addresses.delete(a);
     }
     this.sampleDue(now);
-    const { v, board, hashrate, every = DEFAULT_EVERY } = report;
+    const { v, board, hashrate, every = DEFAULT_EVERY, model } = report;
     // A miner that installs an update restarts and reports again while the
     // report of its previous version still stands for up to an hour: the same
     // board from the same address with another version is that miner, so its
@@ -87,7 +87,7 @@ export class Store {
       const same = sender === address || (sender === undefined && report.every !== undefined && r.every === DEFAULT_EVERY);
       if (r.board === board && r.v !== v && same && r.t + r.every * 1000 > now) r.every = Math.max(1, (now - r.t) / 1000);
     }
-    const entry = { t: now, every, v, board, hashrate };
+    const entry = { t: now, every, v, board, hashrate, ...(model ? { model } : {}) };
     this.live.push(entry);
     this.senders.set(entry, address);
     // Kept while its interval may still be sampled or counted as online.
@@ -146,27 +146,39 @@ export class Store {
 
   summary(now = Date.now()) {
     this.sampleDue(now);
-    // Now: the reports whose interval covers this moment, each in full (a
-    // miner that just started counts at once). That is one per miner, except
-    // for a few seconds while a miner's next report arrives: the count over
-    // the last 5 minutes, weighted by coverage, settles those.
+    // Now: the reports whose interval covers this moment count in full (a
+    // miner that just started counts at once). A report whose interval ended
+    // in the last few seconds (its miner checks every 5 s before sending the
+    // next) fills in only where no newer report has come, so that a miner
+    // changing reports is not counted twice: the count over the last 5
+    // minutes, weighted by coverage, settles it.
     const recent = this.span(now - SAMPLE, now);
-    const current = this.live.filter((r) => r.t <= now && now < r.t + r.every * 1000 + ONLINE_GRACE);
-    const covering = {};
-    for (const r of current) covering[r.board] = (covering[r.board] ?? 0) + 1;
+    const ends = (r) => r.t + r.every * 1000;
+    const active = this.live.filter((r) => r.t <= now && now < ends(r));
+    const late = this.live.filter((r) => ends(r) <= now && now < ends(r) + ONLINE_GRACE);
+    const count = (list) => list.reduce((c, r) => ({ ...c, [r.board]: (c[r.board] ?? 0) + 1 }), {});
+    const strict = count(active), grace = count(late);
     const online = {};
-    for (const [board, n] of Object.entries(covering))
-      online[board] = Math.max(1, Math.min(n, Math.round(recent.boards[board]?.miners ?? 0)));
+    for (const board of new Set([...Object.keys(strict), ...Object.keys(grace)])) {
+      const sure = strict[board] ?? 0;
+      online[board] = Math.max(sure, Math.min(sure + (grace[board] ?? 0), Math.round(recent.boards[board]?.miners ?? 0)));
+      if (!online[board]) delete online[board];
+    }
     const miners = Object.values(online).reduce((a, b) => a + b, 0);
-    const live = { hashrate: 0, boards: {}, versions: {} };
-    for (const r of current) {
-      const share = online[r.board] / covering[r.board];
+    const live = { hashrate: 0, boards: {}, versions: {}, models: {} };
+    const weigh = (r, share) => {
       live.hashrate += r.hashrate * share;
-      for (const [map, key] of [[live.boards, r.board], [live.versions, r.v]]) {
+      // Models: the exact one when the miner tells it (M5Stack), otherwise its board.
+      for (const [map, key] of [[live.boards, r.board], [live.versions, r.v], [live.models, `${r.board}\n${r.model ?? ""}`]]) {
         map[key] ??= { miners: 0, hashrate: 0 };
         map[key].miners += share;
         map[key].hashrate += r.hashrate * share;
       }
+    };
+    for (const r of active) weigh(r, 1);
+    for (const r of late) {
+      const missing = (online[r.board] ?? 0) - (strict[r.board] ?? 0);
+      if (missing > 0) weigh(r, missing / grace[r.board]);
     }
 
     const samples = this.sql.exec("SELECT t, hashrate, miners, boards FROM samples WHERE t > ? ORDER BY t", now - 7 * DAY).toArray();
@@ -217,6 +229,10 @@ export class Store {
       hashrate: live.hashrate,
       boards: breakdown(live.boards),
       versions: breakdown(live.versions),
+      models: breakdown(live.models).map(({ name, ...x }) => {
+        const [board, model] = name.split("\n");
+        return { board, model: model || null, ...x };
+      }),
       fleet,
       // Every 5 minutes over the last 24 hours, then now.
       recent: [...samples.filter((s) => s.t > now - DAY).map((s) => ({ at: s.t, hashrate: s.hashrate, miners: Math.round(s.miners) })),
@@ -230,11 +246,13 @@ export class Store {
 // What a miner sends (src/share.cpp in BDLMinerV1); null for anything else.
 export function parseReport(value) {
   if (!value || typeof value !== "object") return null;
-  const { v, board, hashrate, every } = value;
+  const { v, board, hashrate, every, model } = value;
   if (typeof v !== "string" || !/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v)) return null;
   if (typeof board !== "string" || !/^[a-z0-9-]{1,32}$/.test(board)) return null;
   // Up to 10 TH/s: the fastest board, a Bitaxe Gamma, does about 1.2 TH/s.
   if (typeof hashrate !== "number" || !(hashrate > 0) || hashrate > 1e13) return null;
   if (every !== undefined && (!Number.isInteger(every) || every < 60 || every > 86400)) return null;
-  return every === undefined ? { v, board, hashrate } : { v, board, hashrate, every };
+  // The exact model (M5Stack boards, from 1.9.4): a short name, nothing else.
+  if (model !== undefined && (typeof model !== "string" || !/^[A-Za-z0-9 .+()-]{1,39}$/.test(model))) return null;
+  return { v, board, hashrate, ...(every !== undefined ? { every } : {}), ...(model !== undefined ? { model } : {}) };
 }

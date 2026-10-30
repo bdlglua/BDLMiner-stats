@@ -122,6 +122,17 @@ describe("stats store", () => {
     assert.equal(after.senders.size, 1);
   });
 
+  it("tells the exact models apart when miners give them", () => {
+    store.add({ v: "1.9.4", board: "m5stack-esp32", hashrate: 1e6, every: 300, model: "M5Stack Core2" }, "a", T - 60000);
+    store.add({ v: "1.9.4", board: "m5stack-esp32", hashrate: 9e5, every: 300, model: "M5StickC Plus" }, "b", T - 50000);
+    store.add({ v: "1.9.3", board: "m5stack-esp32", hashrate: 8e5, every: 300 }, "c", T - 40000);
+    store.add({ v: "1.9.4", board: "esp32-headless", hashrate: 7e5, every: 300 }, "d", T - 30000);
+    const s = store.summary(T);
+    assert.deepEqual(s.models.map((m) => [m.board, m.model, m.miners]), [
+      ["m5stack-esp32", "M5Stack Core2", 1], ["m5stack-esp32", "M5StickC Plus", 1], ["m5stack-esp32", null, 1], ["esp32-headless", null, 1]]);
+    assert.deepEqual(s.boards.map((b) => [b.name, b.miners]), [["m5stack-esp32", 3], ["esp32-headless", 1]]);
+  });
+
   it("counts a miner online, with its whole hashrate, from its first report", () => {
     store.add(report(1e6), "a", T - 10000);
     const s = store.summary(T);
@@ -162,6 +173,8 @@ describe("stats store", () => {
   it("accepts only what a miner sends", () => {
     assert.deepEqual(parseReport({ v: "1.9.0", board: "nerdnos", hashrate: 1.5e11 }), { v: "1.9.0", board: "nerdnos", hashrate: 1.5e11 });
     assert.deepEqual(parseReport({ v: "1.9.2", board: "x", hashrate: 1, every: 300 }), { v: "1.9.2", board: "x", hashrate: 1, every: 300 });
+    assert.deepEqual(parseReport({ v: "1.9.4", board: "x", hashrate: 1, every: 300, model: "M5Stack Core2" }).model, "M5Stack Core2");
+    for (const model of ["", "<script>", "x".repeat(40), 5]) assert.equal(parseReport({ v: "1.9.4", board: "x", hashrate: 1, model }), null, String(model));
     for (const bad of [null, {}, { v: "1.9", board: "x", hashrate: 1 }, { v: "1.9.0", board: "Bad Board", hashrate: 1 },
       { v: "1.9.0", board: "x", hashrate: 0 }, { v: "1.9.0", board: "x", hashrate: 1e14 }, { v: "1.9.0", board: "x", hashrate: "1e6" },
       { v: "1.9.2", board: "x", hashrate: 1, every: 5 }, { v: "1.9.2", board: "x", hashrate: 1, every: 1.5 }])

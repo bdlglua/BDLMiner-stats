@@ -9,8 +9,11 @@ BDLMiner 1.9.0) post a report every 5 minutes (1.9.0 and 1.9.1: once an hour, wi
 `every`):
 
 ```json
-{"v": "1.9.2", "board": "m5stickc-plus2", "hashrate": 1.02e6, "every": 300}
+{"v": "1.9.4", "board": "m5stack-esp32", "hashrate": 1.02e6, "every": 300, "model": "M5Stack Core2"}
 ```
+
+`model` (from 1.9.4) only comes when the board tells more than its firmware: the M5Stack
+firmware serves several models, which the summary's `models` list tells apart.
 
 That is all they send: no Bitcoin address, worker, pool, name or identifier. This
 [Cloudflare Worker](https://developers.cloudflare.com/workers/) (free plan) adds them up
