@@ -1,0 +1,14 @@
+{
+  "name": "bdlminer-stats",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Total hashrate of the BDLMiner miners that share it anonymously, with a private statistics page",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

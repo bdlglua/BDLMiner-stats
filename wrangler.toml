@@ -1,0 +1,16 @@
+name = "bdlminer-stats"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+# The reports, in the SQLite storage of one Durable Object (free plan).
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "StatsStore"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["StatsStore"]
+
+[observability]
+enabled = true
