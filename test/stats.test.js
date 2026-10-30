@@ -74,6 +74,44 @@ describe("stats store", () => {
     ]);
   });
 
+  it("does not count a miner twice when it restarts on a new version", () => {
+    // Two hourly 1.9.0 miners (one board, two homes), then both update to 1.9.1 within the hour.
+    store.add(report(1e6, "m5stickc-plus2", 0, "1.9.0"), "home1", T - 50 * MIN);
+    store.add(report(1e6, "esp32-headless", 0, "1.9.0"), "home2", T - 40 * MIN);
+    store.add(report(1e6, "m5stickc-plus2", 0, "1.9.1"), "home1", T - 20 * MIN);
+    store.add(report(1e6, "esp32-headless", 0, "1.9.1"), "home2", T - 10 * MIN);
+    // Another 1.9.0 ESP32 behind a third router keeps its report.
+    store.add(report(1e6, "esp32-headless", 0, "1.9.0"), "home3", T - 5 * MIN);
+    const s = store.summary(T);
+    assert.equal(s.miners, 3);
+    assert.equal(s.hashrate, 3e6);
+    assert.deepEqual(s.versions.map((x) => [x.name, x.miners]), [["1.9.1", 2], ["1.9.0", 1]]);
+    assert.deepEqual(s.fleet, [{ board: "esp32-headless", online: 2, offline: 0 }, { board: "m5stickc-plus2", online: 1, offline: 0 }]);
+  });
+
+  it("ends hourly reports received before a restart when their miners update", () => {
+    const sql = sqlite();
+    const before = new Store(sql);
+    before.add(report(1e6, "m5stickc-plus2", 0, "1.9.1"), "home1", T - 30 * MIN);
+    before.add(report(1e6, "esp32-headless", 0, "1.9.1"), "home2", T - 30 * MIN);
+    const after = new Store(sql);
+    after.add(report(1e6, "m5stickc-plus2", 300, "1.9.2"), "home1", T - MIN);
+    const s = after.summary(T);
+    assert.equal(s.miners, 2);
+    assert.deepEqual(s.versions.map((x) => [x.name, x.miners]).sort(), [["1.9.1", 1], ["1.9.2", 1]]);
+    assert.deepEqual(s.boards.map((x) => [x.name, x.miners]).sort(), [["esp32-headless", 1], ["m5stickc-plus2", 1]]);
+  });
+
+  it("forgets old reports, including those from before a restart", () => {
+    const sql = sqlite();
+    const before = new Store(sql);
+    before.add(report(1e6), "a", T - 3 * HOUR);
+    const after = new Store(sql);  // the Durable Object restarted: senders unknown
+    after.add(report(1e6), "b", T);
+    assert.equal(after.live.length, 1);
+    assert.equal(after.senders.size, 1);
+  });
+
   it("counts a miner online, with its whole hashrate, from its first report", () => {
     store.add(report(1e6), "a", T - 10000);
     const s = store.summary(T);

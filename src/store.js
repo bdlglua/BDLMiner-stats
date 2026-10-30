@@ -30,6 +30,9 @@ export class Store {
     this.live = JSON.parse(this.get("live") ?? "[]");
     this.migrate();
     this.addresses = new Map();  // address -> {count, until}: in memory only, never stored
+    // Which address sent each live report, in memory only (lost on a restart
+    // of the Durable Object, never stored): see add().
+    this.senders = new Map();
   }
 
   get(key) {
@@ -63,10 +66,29 @@ export class Store {
     }
     this.sampleDue(now);
     const { v, board, hashrate, every = DEFAULT_EVERY } = report;
-    this.live.push({ t: now, every, v, board, hashrate });
+    // A miner that installs an update restarts and reports again while the
+    // report of its previous version still stands for up to an hour: the same
+    // board from the same address with another version is that miner, so its
+    // previous report ends now. (Two miners of one board behind one router
+    // that update at different times only lose a few minutes of each other.)
+    // Hourly reports whose sender is unknown (received before a restart of
+    // the Durable Object) end when a report of the same board comes from a
+    // version that says its interval, i.e. 1.9.2 or later.
+    for (const r of this.live) {
+      const sender = this.senders.get(r);
+      const same = sender === address || (sender === undefined && report.every !== undefined && r.every === DEFAULT_EVERY);
+      if (r.board === board && r.v !== v && same && r.t + r.every * 1000 > now) r.every = Math.max(1, (now - r.t) / 1000);
+    }
+    const entry = { t: now, every, v, board, hashrate };
+    this.live.push(entry);
+    this.senders.set(entry, address);
     // Kept while its interval may still be sampled or counted as online.
     const keep = Math.min(this.lastSample(now), now) - SAMPLE;
-    this.live = this.live.filter((r) => r.t + r.every * 1000 + ONLINE_GRACE > keep);
+    this.live = this.live.filter((r) => {
+      const kept = r.t + r.every * 1000 + ONLINE_GRACE > keep;
+      if (!kept) this.senders.delete(r);
+      return kept;
+    });
     this.put("live", JSON.stringify(this.live));
     return true;
   }
