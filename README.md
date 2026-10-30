@@ -5,26 +5,31 @@ that share it, and a public page to follow it:
 **<https://bdlminer-stats.bdlminer-bot.workers.dev/>**
 
 Miners with the *Share my hashrate anonymously* setting (on by default since
-BDLMiner 1.9.0) post a report once an hour:
+BDLMiner 1.9.0) post a report every 5 minutes (1.9.0 and 1.9.1: once an hour, without
+`every`):
 
 ```json
-{"v": "1.9.0", "board": "m5stickc-plus2", "hashrate": 1.02e6}
+{"v": "1.9.2", "board": "m5stickc-plus2", "hashrate": 1.02e6, "every": 300}
 ```
 
 That is all they send: no Bitcoin address, worker, pool, name or identifier. This
-[Cloudflare Worker](https://developers.cloudflare.com/workers/) (free plan) keeps the
-reports for 35 days in the SQLite storage of a Durable Object and adds them up: the
-reports of the last hour give the total hashrate and the number of miners, those of
-each past hour the 7-day history. The sender's network address only limits the number
-of reports (30 an hour per address); it is never stored.
+[Cloudflare Worker](https://developers.cloudflare.com/workers/) (free plan) adds them up
+in the SQLite storage of a Durable Object. Without an identifier, each report stands for
+its miner during the interval that follows it, `[t, t + every)`: a miner's reports tile
+the timeline without overlapping, so the total over the last 5 minutes is the current
+hashrate, and the number of reports covering *now* the miners online. Every 5 minutes
+that total becomes a sample (kept 35 days): the 24-hour chart, the hourly history and
+the best hour come from them. Per board, the miners gone offline are estimated as the
+most seen at once over 7 days minus those online. The sender's network address only
+limits the number of reports (400 an hour per address); it is never stored.
 
 ## Endpoints
 
 | Path | Access | What |
 |---|---|---|
 | `POST /report` | Miners | One report; 204 when stored, 400 when malformed, 429 over the limit |
-| `GET /` | Everyone | The statistics page: total hashrate, miners, average, best hour, 7-day chart, by board and version |
-| `GET /api/summary` | Everyone | The same as JSON (cached a minute, readable from any site) |
+| `GET /` | Everyone | The statistics page: total hashrate, miners, average, best hour, 24-hour chart, by board and version |
+| `GET /api/summary` | Everyone | The same as JSON, with `recent` (5-minute samples over 24 hours, then now), `history` (hourly, 7 days) and `fleet` (online / offline per board); cached 15 s, readable from any site |
 
 The figures hold nothing about any one miner. To make them private, set a
 `STATS_PASSWORD` secret: the page and the JSON then ask for it (HTTP Basic, any user

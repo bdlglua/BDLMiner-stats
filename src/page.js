@@ -1,5 +1,5 @@
-// The private statistics page: one HTML document that reads /api/summary
-// every minute and draws the totals, the 7-day chart and the breakdowns.
+// The statistics page: one HTML document that reads /api/summary every 20
+// seconds and draws the totals, the 24-hour chart and the breakdowns.
 
 export const PAGE = `<!doctype html>
 <html lang="fr">
@@ -45,20 +45,20 @@ export const PAGE = `<!doctype html>
     <div class="status" id="status" role="status">Chargement…</div>
   </header>
   <div class="tiles">
-    <div class="tile"><div class="label">Hashrate total</div><div class="value accent" id="hashrate">–</div><div class="sub">dernière heure</div></div>
+    <div class="tile"><div class="label">Hashrate total</div><div class="value accent" id="hashrate">–</div><div class="sub">5 dernières minutes</div></div>
     <div class="tile"><div class="label">Miners actifs</div><div class="value" id="miners">–</div><div class="sub">qui partagent leur hashrate</div></div>
     <div class="tile"><div class="label">Moyenne par miner</div><div class="value" id="average">–</div></div>
     <div class="tile"><div class="label">Record horaire</div><div class="value" id="record">–</div><div class="sub" id="record-at"></div></div>
   </div>
   <section>
-    <h2>Hashrate total, 7 derniers jours</h2>
-    <svg class="chart" id="chart" viewBox="0 0 960 220" preserveAspectRatio="none" role="img" aria-label="Hashrate total par heure"></svg>
+    <h2>Hashrate total, 24 dernières heures</h2>
+    <svg class="chart" id="chart" viewBox="0 0 960 220" preserveAspectRatio="none" role="img" aria-label="Hashrate total toutes les 5 minutes, 24 dernières heures"></svg>
   </section>
   <div class="split">
     <section><h2>Par carte</h2><table id="boards"></table></section>
     <section><h2>Par version</h2><table id="versions"></table></section>
   </div>
-  <footer>Seuls les miners qui partagent leur hashrate (réglage « Partager mon hashrate anonymement ») sont comptés : un rapport par heure, avec la version, la carte et le hashrate, rien d'autre. Mise à jour toutes les minutes. <a href="https://github.com/bdlglua/BDLMinerV1">BDLMiner V1</a> · <a href="https://github.com/bdlglua/BDLMiner-stats">code de cette page</a> · <a href="/api/summary">données JSON</a></footer>
+  <footer>Seuls les miners qui partagent leur hashrate (réglage « Partager mon hashrate anonymement ») sont comptés : un rapport toutes les 5 minutes (toutes les heures avant la version 1.9.2), avec la version, la carte et le hashrate, rien d'autre. Mise à jour toutes les 20 secondes. <a href="https://github.com/bdlglua/BDLMinerV1">BDLMiner V1</a> · <a href="https://github.com/bdlglua/BDLMiner-stats">code de cette page</a> · <a href="/api/summary">données JSON</a></footer>
 </main>
 <script>
 const UNITS = ["H/s", "kH/s", "MH/s", "GH/s", "TH/s", "PH/s", "EH/s"];
@@ -73,14 +73,14 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 function table(el, rows, label) {
-  if (!rows.length) { el.innerHTML = '<tr><td class="empty">Aucun miner dans la dernière heure.</td></tr>'; return; }
+  if (!rows.length) { el.innerHTML = '<tr><td class="empty">Aucun miner en ce moment.</td></tr>'; return; }
   el.innerHTML = "<tr><th>" + label + '</th><th class="num">Miners</th><th class="num">Hashrate</th></tr>' +
     rows.map((r) => "<tr><td>" + esc(r.name) + '</td><td class="num">' + r.miners + '</td><td class="num">' + rate(r.hashrate) + "</td></tr>").join("");
 }
 
 function chart(points) {
   const svg = $("chart"), W = 960, H = 220, top = 12, bottom = 24, left = 0;
-  if (points.length < 2) { svg.innerHTML = '<text x="12" y="110">Pas encore assez d\\'heures complètes pour tracer la courbe.</text>'; return; }
+  if (points.length < 2) { svg.innerHTML = '<text x="12" y="110">La courbe se remplit au fil des rapports.</text>'; return; }
   const max = Math.max(...points.map((p) => p.hashrate)) * 1.1 || 1;
   const t0 = points[0].at, t1 = points[points.length - 1].at;
   const x = (t) => left + (W - left) * (t - t0) / (t1 - t0 || 1);
@@ -108,18 +108,18 @@ async function refresh() {
     $("average").textContent = s.miners ? rate(s.hashrate / s.miners) : "–";
     $("record").textContent = s.record ? rate(s.record.hashrate) : "–";
     $("record-at").textContent = s.record ? when(s.record.at) : "";
-    chart(s.history);
+    chart(s.recent);
     table($("boards"), s.boards, "Carte");
     table($("versions"), s.versions, "Version");
     $("status").className = "status";
     $("status").textContent = "Mis à jour " + new Date(s.at).toLocaleTimeString("fr-FR");
   } catch (e) {
     $("status").className = "status error";
-    $("status").textContent = "Échec de la mise à jour (" + e.message + "), nouvel essai dans une minute";
+    $("status").textContent = "Échec de la mise à jour (" + e.message + "), nouvel essai dans 20 secondes";
   }
 }
 refresh();
-setInterval(refresh, 60000);
+setInterval(refresh, 20000);
 </script>
 </body>
 </html>

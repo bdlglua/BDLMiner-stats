@@ -34,13 +34,13 @@ const LOCKED = () => new Response("Password required", {
   status: 401, headers: { "WWW-Authenticate": 'Basic realm="BDLMiner stats", charset="UTF-8"' },
 });
 
-// Public figures change once a minute at most: a short cache spares the
-// Durable Object when many people look.
+// The figures move with every report: a short cache only spares the Durable
+// Object when many people look at once.
 function headers(env, type) {
   const common = { "X-Frame-Options": "DENY", ...(type ? { "Content-Type": type } : {}) };
   return env.STATS_PASSWORD
     ? { ...common, "Cache-Control": "no-store", "X-Robots-Tag": "noindex" }
-    : { ...common, "Cache-Control": "public, max-age=60", "Access-Control-Allow-Origin": "*" };
+    : { ...common, "Cache-Control": "public, max-age=15", "Access-Control-Allow-Origin": "*" };
 }
 
 export default {

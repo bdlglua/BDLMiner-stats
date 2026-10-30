@@ -16,64 +16,107 @@ function sqlite() {
   };
 }
 
-const HOUR = 3600 * 1000;
+const MIN = 60 * 1000;
+const HOUR = 60 * MIN;
 const T = Date.UTC(2026, 9, 30, 12, 0, 0);
-const report = (hashrate, board = "m5stickc-plus2", v = "1.9.0") => ({ v, board, hashrate });
+const report = (hashrate, board = "m5stickc-plus2", every = 300, v = "1.9.2") =>
+  every ? { v, board, hashrate, every } : { v, board, hashrate };
+
+// Reports of several miners, in time order: [time, report, address].
+function feed(store, ...miners) {
+  const events = miners.flatMap(({ from, to, period, r, address = "a" }) => {
+    const out = [];
+    for (let t = from; t <= to; t += period) out.push([t, r, address]);
+    return out;
+  }).sort((a, b) => a[0] - b[0]);
+  for (const [t, r, address] of events) store.add(r, address, t);
+}
+
+const near = (actual, expected, tolerance = 0.03) =>
+  assert.ok(Math.abs(actual - expected) <= expected * tolerance, `${actual} is not about ${expected}`);
 
 describe("stats store", () => {
   let store;
   beforeEach(() => { store = new Store(sqlite()); });
 
-  it("adds up the reports of the last hour, by board and version", () => {
-    store.add(report(1e6), "a", T - 2 * HOUR);  // older than the window
-    store.add(report(1e6), "a", T - 30 * 60000);
-    store.add(report(2e6, "esp32-headless"), "b", T - 10 * 60000);
-    store.add(report(3e6, "esp32-headless", "1.8.0"), "c", T - 60000);
+  it("adds up miners reporting every 5 minutes and hourly, without counting one twice", () => {
+    feed(store,
+      // 1.9.2: every 5 minutes, a little late each time as on a board (polled every 5 s).
+      { from: T - 2 * HOUR + 7000, to: T, period: 5 * MIN + 3000, r: report(1e6) },
+      { from: T - 2 * HOUR + 90000, to: T, period: 5 * MIN + 1000, r: report(2e6, "esp32-headless"), address: "b" },
+      // 1.9.0: hourly, without saying so.
+      { from: T - 3 * HOUR + 30000, to: T, period: HOUR + 2000, r: report(5e5, "lilygo-t-display", 0, "1.9.0"), address: "c" });
     const s = store.summary(T);
     assert.equal(s.miners, 3);
-    assert.equal(s.hashrate, 6e6);
-    assert.deepEqual(s.boards, [{ name: "esp32-headless", miners: 2, hashrate: 5e6 }, { name: "m5stickc-plus2", miners: 1, hashrate: 1e6 }]);
-    assert.deepEqual(s.versions.map((v) => v.name), ["1.9.0", "1.8.0"]);
+    near(s.hashrate, 3.5e6);
+    assert.deepEqual(s.boards.map((b) => [b.name, b.miners]), [["esp32-headless", 1], ["m5stickc-plus2", 1], ["lilygo-t-display", 1]]);
+    assert.deepEqual(s.versions.map((v) => v.name), ["1.9.2", "1.9.0"]);
+    // Every 5-minute sample once all three reported, and every complete hour.
+    for (const p of s.recent.filter((p) => p.at > T - 100 * MIN)) near(p.hashrate, 3.5e6);
+    assert.equal(s.recent.at(-1).live, true);
+    assert.equal(s.recent.filter((p) => !p.live).every((p, i, a) => !i || p.at - a[i - 1].at === 5 * MIN), true);
+    near(s.history.at(-1).hashrate, 3.5e6);
+    assert.equal(s.history.at(-1).at, T - HOUR);
+    near(s.record.hashrate, 3.5e6);
   });
 
-  it("keeps a history per full hour and the best hour", () => {
-    store.add(report(1e6), "a", T - 3 * HOUR + 1000);
-    store.add(report(2e6), "b", T - 3 * HOUR + 2000);
-    store.add(report(1e6), "a", T - 2 * HOUR + 1000);
-    store.add(report(5e6), "a", T + 1000);  // the hour still filling up
-    const s = store.summary(T + 2000);
-    assert.deepEqual(s.history, [{ at: T - 3 * HOUR, miners: 2, hashrate: 3e6 }, { at: T - 2 * HOUR, miners: 1, hashrate: 1e6 }]);
-    assert.deepEqual(s.record, { at: T, hashrate: 5e6 });
-  });
-
-  it("counts each board's miners online, and estimates those gone offline", () => {
-    // Two NerdNOS an hour ago, one still reporting; a T-Display last seen 3 days ago.
-    store.add(report(1e11, "nerdnos"), "a", T - 90 * 60000);
-    store.add(report(1e11, "nerdnos"), "b", T - 80 * 60000);
-    store.add(report(1e11, "nerdnos"), "a", T - 20 * 60000);
-    store.add(report(5e5, "lilygo-t-display"), "c", T - 3 * 24 * HOUR);
-    store.add(report(1e6, "m5stickc-plus2"), "d", T - 5 * 60000);
-    store.add(report(1e6, "m5stickc-plus2"), "e", T - 4 * 60000);
-    assert.deepEqual(store.summary(T).fleet, [
-      { board: "m5stickc-plus2", online: 2, offline: 0 },
+  it("drops a miner within 5 minutes of its last report, and counts it offline", () => {
+    feed(store,
+      { from: T - HOUR, to: T - 30 * MIN, period: 5 * MIN + 2000, r: report(1e11, "nerdnos") },
+      { from: T - HOUR + 1000, to: T, period: 5 * MIN + 2000, r: report(1e11, "nerdnos"), address: "b" },
+      { from: T - HOUR + 2000, to: T, period: 5 * MIN + 2000, r: report(1e6) , address: "c" });
+    const s = store.summary(T);
+    assert.equal(s.miners, 2);
+    near(s.hashrate, 1e11 + 1e6);
+    assert.deepEqual(s.fleet, [
       { board: "nerdnos", online: 1, offline: 1 },
-      { board: "lilygo-t-display", online: 0, offline: 1 },
+      { board: "m5stickc-plus2", online: 1, offline: 0 },
     ]);
   });
 
-  it("limits the reports per address, and forgets old ones", () => {
-    for (let i = 0; i < 30; i++) assert.equal(store.add(report(1e6), "flood", T + i), true);
-    assert.equal(store.add(report(1e6), "flood", T + 31), false);
-    assert.equal(store.add(report(1e6), "other", T + 32), true);
+  it("counts a miner online, with its whole hashrate, from its first report", () => {
+    store.add(report(1e6), "a", T - 10000);
+    const s = store.summary(T);
+    assert.equal(s.miners, 1);
+    assert.equal(s.hashrate, 1e6);
+    assert.equal(s.recent.at(-1).hashrate, 1e6);
+    assert.deepEqual(s.fleet, [{ board: "m5stickc-plus2", online: 1, offline: 0 }]);
+  });
+
+  it("keeps sampling with no report, and prunes samples older than 35 days", () => {
+    store.add(report(1e6), "a", T);
+    const later = T + 40 * 24 * HOUR;
+    const s = store.summary(later);
+    assert.equal(s.miners, 0);
+    assert.equal(s.hashrate, 0);
+    assert.equal(s.recent.length, 24 * 12 + 1);  // a day of zero samples, then now
+    assert.equal(store.sql.exec("SELECT MIN(t) AS t FROM samples").toArray()[0].t > later - 35 * 24 * HOUR, true);
+  });
+
+  it("turns the hourly reports of the first version into live ones", () => {
+    const sql = sqlite();
+    const now = Date.now();
+    sql.exec("CREATE TABLE reports (t INTEGER NOT NULL, v TEXT NOT NULL, board TEXT NOT NULL, hashrate REAL NOT NULL)");
+    sql.exec("INSERT INTO reports VALUES (?, '1.9.0', 'esp32-headless', 1000000), (?, '1.9.0', 'esp32-headless', 1000000)", now - 2 * HOUR, now - 10 * MIN);
+    const migrated = new Store(sql);
+    assert.equal(migrated.summary(now).miners, 1);
+    assert.equal(sql.exec("SELECT name FROM sqlite_master WHERE name = 'reports'").toArray().length, 0);
+    assert.equal(new Store(sql).summary(now).miners, 1);  // kept across restarts
+  });
+
+  it("limits the reports per address", () => {
+    for (let i = 0; i < 400; i++) assert.equal(store.add(report(1e6), "flood", T + i), true);
+    assert.equal(store.add(report(1e6), "flood", T + 401), false);
+    assert.equal(store.add(report(1e6), "other", T + 402), true);
     assert.equal(store.add(report(1e6), "flood", T + HOUR + 1), true);
-    store.add(report(1e6), "x", T + 40 * 24 * HOUR);  // prunes what is older than 35 days
-    assert.equal(store.summary(T + 40 * 24 * HOUR).history.length, 0);
   });
 
   it("accepts only what a miner sends", () => {
     assert.deepEqual(parseReport({ v: "1.9.0", board: "nerdnos", hashrate: 1.5e11 }), { v: "1.9.0", board: "nerdnos", hashrate: 1.5e11 });
+    assert.deepEqual(parseReport({ v: "1.9.2", board: "x", hashrate: 1, every: 300 }), { v: "1.9.2", board: "x", hashrate: 1, every: 300 });
     for (const bad of [null, {}, { v: "1.9", board: "x", hashrate: 1 }, { v: "1.9.0", board: "Bad Board", hashrate: 1 },
-      { v: "1.9.0", board: "x", hashrate: 0 }, { v: "1.9.0", board: "x", hashrate: 1e14 }, { v: "1.9.0", board: "x", hashrate: "1e6" }])
+      { v: "1.9.0", board: "x", hashrate: 0 }, { v: "1.9.0", board: "x", hashrate: 1e14 }, { v: "1.9.0", board: "x", hashrate: "1e6" },
+      { v: "1.9.2", board: "x", hashrate: 1, every: 5 }, { v: "1.9.2", board: "x", hashrate: 1, every: 1.5 }])
       assert.equal(parseReport(bad), null, JSON.stringify(bad));
   });
 });
@@ -106,7 +149,7 @@ describe("stats worker", () => {
     const page = await get("/");
     assert.equal(page.status, 200);
     assert.match(await page.text(), /Hashrate total/);
-    assert.equal(page.headers.get("Cache-Control"), "public, max-age=60");
+    assert.equal(page.headers.get("Cache-Control"), "public, max-age=15");
     const summary = await get("/api/summary");
     assert.equal(summary.headers.get("Access-Control-Allow-Origin"), "*");
     assert.equal((await summary.json()).miners, 1);
