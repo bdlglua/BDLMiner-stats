@@ -46,6 +46,21 @@ describe("stats store", () => {
     assert.deepEqual(s.record, { at: T, hashrate: 5e6 });
   });
 
+  it("counts each board's miners online, and estimates those gone offline", () => {
+    // Two NerdNOS an hour ago, one still reporting; a T-Display last seen 3 days ago.
+    store.add(report(1e11, "nerdnos"), "a", T - 90 * 60000);
+    store.add(report(1e11, "nerdnos"), "b", T - 80 * 60000);
+    store.add(report(1e11, "nerdnos"), "a", T - 20 * 60000);
+    store.add(report(5e5, "lilygo-t-display"), "c", T - 3 * 24 * HOUR);
+    store.add(report(1e6, "m5stickc-plus2"), "d", T - 5 * 60000);
+    store.add(report(1e6, "m5stickc-plus2"), "e", T - 4 * 60000);
+    assert.deepEqual(store.summary(T).fleet, [
+      { board: "m5stickc-plus2", online: 2, offline: 0 },
+      { board: "nerdnos", online: 1, offline: 1 },
+      { board: "lilygo-t-display", online: 0, offline: 1 },
+    ]);
+  });
+
   it("limits the reports per address, and forgets old ones", () => {
     for (let i = 0; i < 30; i++) assert.equal(store.add(report(1e6), "flood", T + i), true);
     assert.equal(store.add(report(1e6), "flood", T + 31), false);
