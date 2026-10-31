@@ -181,6 +181,14 @@ describe("stats store", () => {
       { v: "1.9.2", board: "x", hashrate: 1, every: 5 }, { v: "1.9.2", board: "x", hashrate: 1, every: 1.5 }])
       assert.equal(parseReport(bad), null, JSON.stringify(bad));
   });
+
+  it("refuses a hashrate the board cannot do", () => {
+    const ok = (board, hashrate) => parseReport({ v: "1.9.6", board, hashrate, every: 300 }) !== null;
+    assert.ok(ok("m5stickc-plus2", 1.02e6) && ok("esp32-headless", 5e6) && ok("dev", 3e5));
+    assert.ok(!ok("m5stickc-plus2", 6e6) && !ok("esp32-headless", 1e13) && !ok("unknown-board", 1e9));
+    assert.ok(ok("nerdnos", 5e11) && !ok("nerdnos", 3e12));
+    assert.ok(ok("bitaxe-gamma-601", 1.2e12) && !ok("bitaxe-gamma-601", 1e13));
+  });
 });
 
 describe("stats worker", () => {

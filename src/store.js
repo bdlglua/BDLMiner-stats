@@ -243,14 +243,21 @@ export class Store {
   }
 }
 
+// The most a board can do, with room to spare: a report beyond it is made up
+// and would inflate the total. The ESP32 boards hash in software (about
+// 1 MH/s at best); the ASIC boards in GH/s (NerdNOS) and TH/s (Bitaxe Gamma,
+// about 1.2 TH/s).
+const ASIC_MAX = { nerdnos: 2e12, "bitaxe-gamma-601": 5e12 };
+const SOFTWARE_MAX = 5e6;
+const maxHashrate = (board) => (Object.hasOwn(ASIC_MAX, board) ? ASIC_MAX[board] : SOFTWARE_MAX);
+
 // What a miner sends (src/share.cpp in BDLMinerV1); null for anything else.
 export function parseReport(value) {
   if (!value || typeof value !== "object") return null;
   const { v, board, hashrate, every, model } = value;
   if (typeof v !== "string" || !/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v)) return null;
   if (typeof board !== "string" || !/^[a-z0-9-]{1,32}$/.test(board)) return null;
-  // Up to 10 TH/s: the fastest board, a Bitaxe Gamma, does about 1.2 TH/s.
-  if (typeof hashrate !== "number" || !(hashrate > 0) || hashrate > 1e13) return null;
+  if (typeof hashrate !== "number" || !(hashrate > 0) || hashrate > maxHashrate(board)) return null;
   if (every !== undefined && (!Number.isInteger(every) || every < 60 || every > 86400)) return null;
   // The exact model (M5Stack boards, from 1.9.4): a short name, nothing else.
   if (model !== undefined && (typeof model !== "string" || !/^[A-Za-z0-9 .+()-]{1,39}$/.test(model))) return null;
