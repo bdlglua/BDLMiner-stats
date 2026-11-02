@@ -1,6 +1,6 @@
 # BDLMiner stats
 
-The total hashrate of the [BDLMiner](https://github.com/bdlglua/BDLMinerV1) miners
+The total hashrate of the [BDLMiner](https://github.com/bdlglua/BDLMinerV2) miners
 that share it, and a public page to follow it:
 **<https://bdlminer-stats.bdlminer-bot.workers.dev/>**
 
@@ -58,7 +58,7 @@ and the reports cannot be authenticated (the firmware is open source).
    private page).
 3. Run the **Test and deploy** workflow, or push to `main`. The Worker answers at
    `https://bdlminer-stats.<your-subdomain>.workers.dev/`, the address built into the
-   firmware (`STATS_URL` in BDLMinerV1's `src/share.h`).
+   firmware (`STATS_URL` in BDLMinerV2's `src/share.h`).
 
 ## Development
 
@@ -68,4 +68,4 @@ npm test    # Node 22+: the store runs on node:sqlite, the Worker on faked bindi
 
 ## License
 
-[GNU GPL v3.0](LICENSE), like BDLMiner V1.
+[GNU GPL v3.0](LICENSE), like BDLMiner V2.
