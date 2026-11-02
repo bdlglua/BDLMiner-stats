@@ -1,6 +1,8 @@
 // The statistics page: one HTML document that reads /api/summary every 20
 // seconds and draws the totals, the 24-hour chart and the breakdowns.
 
+import { POOL_LABELS } from "./pools.js";
+
 export const PAGE = `<!doctype html>
 <html lang="fr">
 <head>
@@ -58,10 +60,12 @@ export const PAGE = `<!doctype html>
     <section><h2>Par carte</h2><table id="boards"></table></section>
     <section><h2>Par version</h2><table id="versions"></table></section>
   </div>
-  <footer>Seuls les miners qui partagent leur hashrate (réglage « Partager mon hashrate anonymement ») sont comptés : un rapport toutes les 5 minutes (toutes les heures avant la version 1.9.2), avec la version, la carte et le hashrate, rien d'autre. Mise à jour toutes les 20 secondes. <a href="https://github.com/bdlglua/BDLMinerV2">BDLMiner V2</a> · <a href="https://github.com/bdlglua/BDLMiner-stats">code de cette page</a> · <a href="/api/summary">données JSON</a></footer>
+  <section><h2>Par pool</h2><table id="pools"></table><p class="status">Le partage de la pool est facultatif, désactivé par défaut et disponible à partir de BDLMiner 2.0.2. Seul le groupe public est partagé ; les autres pools sont masquées. « Pool non renseignée » inclut les anciennes versions, le partage désactivé et les connexions au pool interrompues.</p></section>
+  <footer>Seuls les miners qui partagent leur hashrate (réglage « Partager mon hashrate anonymement ») sont comptés : un rapport toutes les 5 minutes (toutes les heures avant la version 1.9.2), avec la version, la carte, le hashrate et, sur certains M5Stack, le modèle. La pool publique peut être partagée séparément. Ni adresse Bitcoin, ni worker, ni nom d’hôte privé, ni identifiant. Mise à jour toutes les 20 secondes. <a href="https://github.com/bdlglua/BDLMinerV2">BDLMiner V2</a> · <a href="https://github.com/bdlglua/BDLMiner-stats">code de cette page</a> · <a href="/api/summary">données JSON</a></footer>
 </main>
 <script>
 const UNITS = ["H/s", "kH/s", "MH/s", "GH/s", "TH/s", "PH/s", "EH/s"];
+const POOL_LABELS = ${JSON.stringify(POOL_LABELS)};
 function rate(h) {
   if (!(h > 0)) return "0 H/s";
   let i = 0;
@@ -111,6 +115,8 @@ async function refresh() {
     chart(s.recent);
     table($("boards"), s.boards, "Carte");
     table($("versions"), s.versions, "Version");
+    const pools = s.pools ?? (s.miners ? [{ name: "unknown", miners: s.miners, hashrate: s.hashrate }] : []);
+    table($("pools"), pools.map((p) => ({ ...p, name: Object.hasOwn(POOL_LABELS, p.name) ? POOL_LABELS[p.name] : POOL_LABELS.other })), "Pool");
     $("status").className = "status";
     $("status").textContent = "Mis à jour " + new Date(s.at).toLocaleTimeString("fr-FR");
   } catch (e) {

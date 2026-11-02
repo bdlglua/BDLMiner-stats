@@ -1,5 +1,5 @@
 // BDLMiner statistics: miners that share their hashrate (the "Share my
-// hashrate anonymously" setting) post a report every hour to /report; the
+// hashrate anonymously" setting) post a report every 5 minutes to /report; the
 // public page / shows the totals. They hold nothing about any one miner; a
 // STATS_PASSWORD, if set, makes the page private again.
 

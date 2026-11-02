@@ -9,6 +9,8 @@
 // minutes that total is kept as one sample: the 24-hour chart, the 7-day
 // hourly history and the records come from the samples.
 
+import { poolGroup, validPool } from "./pools.js";
+
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -73,7 +75,7 @@ export class Store {
       if (this.addresses.size > 10000) for (const [a, s] of this.addresses) if (s.until <= now) this.addresses.delete(a);
     }
     this.sampleDue(now);
-    const { v, board, hashrate, every = DEFAULT_EVERY, model } = report;
+    const { v, board, hashrate, every = DEFAULT_EVERY, model, pool } = report;
     // A miner that installs an update restarts and reports again while the
     // report of its previous version still stands for up to an hour: the same
     // board from the same address with another version is that miner, so its
@@ -87,7 +89,8 @@ export class Store {
       const same = sender === address || (sender === undefined && report.every !== undefined && r.every === DEFAULT_EVERY);
       if (r.board === board && r.v !== v && same && r.t + r.every * 1000 > now) r.every = Math.max(1, (now - r.t) / 1000);
     }
-    const entry = { t: now, every, v, board, hashrate, ...(model ? { model } : {}) };
+    const entry = { t: now, every, v, board, hashrate, ...(model ? { model } : {}),
+      ...(pool === undefined ? {} : { pool: poolGroup(pool) }) };
     this.live.push(entry);
     this.senders.set(entry, address);
     // Kept while its interval may still be sampled or counted as online.
@@ -165,11 +168,12 @@ export class Store {
       if (!online[board]) delete online[board];
     }
     const miners = Object.values(online).reduce((a, b) => a + b, 0);
-    const live = { hashrate: 0, boards: {}, versions: {}, models: {} };
+    const live = { hashrate: 0, boards: {}, versions: {}, models: {}, pools: {} };
     const weigh = (r, share) => {
       live.hashrate += r.hashrate * share;
       // Models: the exact one when the miner tells it (M5Stack), otherwise its board.
-      for (const [map, key] of [[live.boards, r.board], [live.versions, r.v], [live.models, `${r.board}\n${r.model ?? ""}`]]) {
+      for (const [map, key] of [[live.boards, r.board], [live.versions, r.v], [live.models, `${r.board}\n${r.model ?? ""}`],
+        [live.pools, poolGroup(r.pool)]]) {
         map[key] ??= { miners: 0, hashrate: 0 };
         map[key].miners += share;
         map[key].hashrate += r.hashrate * share;
@@ -229,6 +233,7 @@ export class Store {
       hashrate: live.hashrate,
       boards: breakdown(live.boards),
       versions: breakdown(live.versions),
+      pools: breakdown(live.pools),
       models: breakdown(live.models).map(({ name, ...x }) => {
         const [board, model] = name.split("\n");
         return { board, model: model || null, ...x };
@@ -251,10 +256,10 @@ const ASIC_MAX = { nerdnos: 2e12, "bitaxe-gamma-601": 5e12 };
 const SOFTWARE_MAX = 5e6;
 const maxHashrate = (board) => (Object.hasOwn(ASIC_MAX, board) ? ASIC_MAX[board] : SOFTWARE_MAX);
 
-// What a miner sends (src/share.cpp in BDLMinerV1); null for anything else.
+// What a miner sends (src/share.cpp in BDLMinerV2); null for anything else.
 export function parseReport(value) {
   if (!value || typeof value !== "object") return null;
-  const { v, board, hashrate, every, model } = value;
+  const { v, board, hashrate, every, model, pool } = value;
   // Firmware versions fit 23 characters and may be SemVer prereleases/builds.
   // Keep the original bounds on core components and reject leading zeroes in
   // numeric prerelease identifiers; labels are stored exactly as reported.
@@ -267,9 +272,11 @@ export function parseReport(value) {
   if (every !== undefined && (!Number.isInteger(every) || every < 60 || every > 86400)) return null;
   // The exact model (M5Stack boards, from 1.9.4): a short name, nothing else.
   if (model !== undefined && (typeof model !== "string" || !/^[A-Za-z0-9 .+()-]{1,39}$/.test(model))) return null;
+  if (pool !== undefined && !validPool(pool)) return null;
   // 1.9.4 also sends a model that only repeats its board ("M5StickC Plus2" for
   // m5stickc-plus2): it tells nothing more.
   const plain = (x) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
   const tells = model !== undefined && plain(model) !== plain(board);
-  return { v, board, hashrate, ...(every !== undefined ? { every } : {}), ...(tells ? { model } : {}) };
+  return { v, board, hashrate, ...(every !== undefined ? { every } : {}), ...(tells ? { model } : {}),
+    ...(pool === undefined ? {} : { pool }) };
 }
