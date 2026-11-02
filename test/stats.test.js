@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, it } from "node:test";
 import handler, { authorized } from "../src/index.js";
 import { parseReport, Store } from "../src/store.js";
+import { PUBLIC_POOLS } from "../src/pools.js";
 
 // The Durable Object's SQL interface (ctx.storage.sql.exec) over node:sqlite.
 function sqlite() {
@@ -38,6 +39,54 @@ const near = (actual, expected, tolerance = 0.03) =>
 describe("stats store", () => {
   let store;
   beforeEach(() => { store = new Store(sqlite()); });
+
+  it("groups public, private and undisclosed pools without changing the totals", () => {
+    const entries = [
+      { ...report(1e6), pool: "public-pool.io" },
+      { ...report(2e6), pool: "public-pool.io" },
+      { ...report(5e5), pool: "nerdminers.org" },
+      { ...report(3e5), pool: "other" },
+      report(2e5), // old firmware or no opt-in
+    ];
+    entries.forEach((r, i) => store.add(r, String(i), T));
+    const summary = store.summary(T + MIN);
+    assert.equal(summary.miners, 5);
+    assert.equal(summary.pools.reduce((n, p) => n + p.miners, 0), 5);
+    assert.equal(summary.pools.reduce((n, p) => n + p.hashrate, 0), summary.hashrate);
+    assert.deepEqual(summary.pools, [
+      { name: "public-pool.io", miners: 2, hashrate: 3e6 },
+      { name: "nerdminers.org", miners: 1, hashrate: 5e5 },
+      { name: "other", miners: 1, hashrate: 3e5 },
+      { name: "unknown", miners: 1, hashrate: 2e5 },
+    ]);
+    const restarted = new Store(store.sql);
+    assert.deepEqual(restarted.summary(T + MIN).pools, summary.pools);
+    assert.deepEqual(store.summary(T + 6 * MIN).pools, []);
+  });
+
+  it("applies the existing report grace to pools without counting a switch twice", () => {
+    store.add({ ...report(1e6), pool: "public-pool.io" }, "a", T);
+    assert.deepEqual(store.summary(T + 301000).pools, [{ name: "public-pool.io", miners: 1, hashrate: 1e6 }]);
+    store.add({ ...report(1e6), pool: "ckpool.org" }, "a", T + 302000);
+    assert.deepEqual(store.summary(T + 303000).pools, [{ name: "ckpool.org", miners: 1, hashrate: 1e6 }]);
+  });
+
+  it("never stores an arbitrary pool endpoint, even if the HTTP parser is bypassed", () => {
+    store.add({ ...report(1e6), pool: "http://wallet:password@192.168.1.2:3333" }, "a", T);
+    assert.equal(store.live[0].pool, "other");
+    assert.doesNotMatch(store.get("live"), /wallet|password|192\.168/);
+    assert.deepEqual(store.summary(T + MIN).pools, [{ name: "other", miners: 1, hashrate: 1e6 }]);
+  });
+
+  it("accepts only finite pool groups and keeps legacy reports unchanged", () => {
+    const base = report(1e6);
+    assert.deepEqual(parseReport(base), base);
+    for (const pool of [...Object.keys(PUBLIC_POOLS), "other"])
+      assert.deepEqual(parseReport({ ...base, pool }), { ...base, pool });
+    for (const pool of ["", "unknown", "__proto__", "constructor", "192.168.1.20", "miner.local", "private.example",
+      "pool.nerdminers.org", "https://wallet.worker@public-pool.io", "<script>", null, {}, 1])
+      assert.equal(parseReport({ ...base, pool }), null, JSON.stringify(pool));
+  });
 
   it("adds up miners reporting every 5 minutes and hourly, without counting one twice", () => {
     feed(store,
@@ -219,6 +268,19 @@ describe("stats worker", () => {
     assert.equal((await post("x".repeat(600))).status, 413);
     assert.equal((await handler.fetch(new Request("https://stats.example/report"), env)).status, 405);
     assert.equal(store.summary().miners, 1);
+  });
+
+  it("exposes only pool aggregates and rejects endpoint or credential payloads", async () => {
+    delete env.STATS_PASSWORD;
+    assert.equal((await post({ ...report(1e6), pool: "public-pool.io" })).status, 204);
+    assert.equal((await post(report(1e6), "b")).status, 204);
+    assert.equal((await post({ ...report(1e6), pool: "wallet:secret@private.example" })).status, 400);
+    const summary = await (await get("/api/summary")).json();
+    assert.deepEqual(summary.pools.map(({ name, miners }) => [name, miners]).sort(), [["public-pool.io", 1], ["unknown", 1]]);
+    assert.doesNotMatch(JSON.stringify(summary), /wallet|secret|private\.example/);
+    const page = await (await get("/")).text();
+    assert.match(page, /<h2>Par pool<\/h2>/);
+    assert.match(page, /désactivé par défaut/);
   });
 
   it("stores real V2 beta report shapes for ESP32 and Gamma while keeping hardware caps", async () => {

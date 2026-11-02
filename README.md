@@ -20,7 +20,21 @@ with optional build metadata. It is kept as reported and bounded to the firmware
 23-character limit. The same board-specific hashrate limits apply to stable and
 prerelease reports; accepting a beta does not imply its release or hardware validation.
 
-That is all they send: no Bitcoin address, worker, pool, name or identifier. This
+From BDLMiner 2.0.2, **Share my pool anonymously** (`sharepool`, off by default)
+can add a `pool` group to the existing report. It requires hashrate sharing and
+an active pool connection. A fixed allowlist maps public hosts and their
+subdomains to `public-pool.io`, `nerdminers.org`, `nerdminer.io`, `ckpool.org`,
+`ocean.xyz`, `braiins.com`, `viabtc.com`, `f2pool.com` or `antpool.com`.
+Other hosts, including local/private endpoints, become `other` on the device.
+The configured hostname, URL, port, Bitcoin address and worker are never sent.
+The collector accepts only these finite groups; raw endpoints are rejected.
+
+The summary's `pools` list uses the same live weighting and grace interval as
+the other breakdowns. `unknown` includes older firmware, pool sharing disabled
+and a disconnected pool. It is not an inferred pool name. Old reports remain
+valid and existing samples need no migration. No per-miner pool list is exposed.
+
+No Bitcoin address, worker, private hostname, name or identifier is sent. This
 [Cloudflare Worker](https://developers.cloudflare.com/workers/) (free plan) adds them up
 in the SQLite storage of a Durable Object. Without an identifier, each report stands for
 its miner during the interval that follows it, `[t, t + every)`: a miner's reports tile
@@ -39,8 +53,8 @@ previous report then ends, so that it is not counted twice. It is never stored.
 | Path | Access | What |
 |---|---|---|
 | `POST /report` | Miners | One report; 204 when stored, 400 when malformed, 429 over the limit |
-| `GET /` | Everyone | The statistics page: total hashrate, miners, average, best hour, 24-hour chart, by board and version |
-| `GET /api/summary` | Everyone | The same as JSON, with `recent` (5-minute samples over 24 hours, then now), `history` (hourly, 7 days) and `fleet` (online / offline per board); cached 15 s, readable from any site |
+| `GET /` | Everyone | The statistics page: total hashrate, miners, average, best hour, 24-hour chart, by board, version and pool |
+| `GET /api/summary` | Everyone | The same as JSON, with `pools` (name, miners, hashrate), `recent` (5-minute samples over 24 hours, then now), `history` (hourly, 7 days) and `fleet` (online / offline per board); cached 15 s, readable from any site |
 
 The figures hold nothing about any one miner. To make them private, set a
 `STATS_PASSWORD` secret: the page and the JSON then ask for it (HTTP Basic, any user
