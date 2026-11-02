@@ -255,7 +255,13 @@ const maxHashrate = (board) => (Object.hasOwn(ASIC_MAX, board) ? ASIC_MAX[board]
 export function parseReport(value) {
   if (!value || typeof value !== "object") return null;
   const { v, board, hashrate, every, model } = value;
-  if (typeof v !== "string" || !/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v)) return null;
+  // Firmware versions fit 23 characters and may be SemVer prereleases/builds.
+  // Keep the original bounds on core components and reject leading zeroes in
+  // numeric prerelease identifiers; labels are stored exactly as reported.
+  const version = typeof v === "string" && v.length <= 23
+    ? /^(?:0|[1-9]\d{0,2})\.(?:0|[1-9]\d{0,2})\.(?:0|[1-9]\d{0,2})(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(v)
+    : null;
+  if (!version || version[0] !== v || (version[1] ?? "").split(".").some((part) => /^0\d+$/.test(part))) return null;
   if (typeof board !== "string" || !/^[a-z0-9-]{1,32}$/.test(board)) return null;
   if (typeof hashrate !== "number" || !(hashrate > 0) || hashrate > maxHashrate(board)) return null;
   if (every !== undefined && (!Number.isInteger(every) || every < 60 || every > 86400)) return null;

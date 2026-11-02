@@ -182,6 +182,14 @@ describe("stats store", () => {
       assert.equal(parseReport(bad), null, JSON.stringify(bad));
   });
 
+  it("accepts firmware SemVer prereleases without accepting malformed version labels", () => {
+    for (const v of ["1.9.15", "2.0.0-beta.1", "2.0.0-rc.2", "2.0.0-alpha.0", "2.0.0-dev", "2.0.0-beta.1+abc", "2.0.0+build.001"])
+      assert.equal(parseReport({ v, board: "bitaxe-gamma-601", hashrate: 1.08e12, every: 300 })?.v, v);
+    for (const v of ["2.0", "2.0.0-", "2.0.0-beta..1", "2.0.0-beta.01", "2.0.0-01", "2.0.0+", "2.0.0-beta.1\n",
+      "2.0.0-<script>", "02.0.0-beta.1", "2.0.0-" + "a".repeat(20)])
+      assert.equal(parseReport({ v, board: "bitaxe-gamma-601", hashrate: 1.08e12, every: 300 }), null, v);
+  });
+
   it("refuses a hashrate the board cannot do", () => {
     const ok = (board, hashrate) => parseReport({ v: "1.9.6", board, hashrate, every: 300 }) !== null;
     assert.ok(ok("m5stickc-plus2", 1.02e6) && ok("esp32-headless", 5e6) && ok("dev", 3e5));
@@ -211,6 +219,19 @@ describe("stats worker", () => {
     assert.equal((await post("x".repeat(600))).status, 413);
     assert.equal((await handler.fetch(new Request("https://stats.example/report"), env)).status, 405);
     assert.equal(store.summary().miners, 1);
+  });
+
+  it("stores real V2 beta report shapes for ESP32 and Gamma while keeping hardware caps", async () => {
+    const gamma = { v: "2.0.0-beta.1", board: "bitaxe-gamma-601", hashrate: 1.08e12, every: 300 };
+    const m5 = { v: "2.0.0-beta.1", board: "m5stickc-plus2", hashrate: 1.02e6, every: 300 };
+    assert.equal((await post(gamma)).status, 204);
+    assert.equal((await post(m5)).status, 204);
+    assert.equal((await post({ ...gamma, hashrate: 1e13 })).status, 400);
+    assert.equal((await post({ ...m5, hashrate: 6e6 })).status, 400);
+    const summary = store.summary();
+    near(summary.hashrate, gamma.hashrate + m5.hashrate);
+    assert.equal(summary.miners, 2);
+    assert.deepEqual(summary.versions.map(({name, miners}) => [name, miners]), [["2.0.0-beta.1", 2]]);
   });
 
   it("shows the page and the summary to everyone", async () => {

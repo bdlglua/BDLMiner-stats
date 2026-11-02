@@ -15,6 +15,11 @@ BDLMiner 1.9.0) post a report every 5 minutes (1.9.0 and 1.9.1: once an hour, wi
 `model` (from 1.9.4) only comes when the board tells more than its firmware: the M5Stack
 firmware serves several models, which the summary's `models` list tells apart.
 
+The version may also be a SemVer prerelease such as `2.0.0-beta.1` or `2.0.0-rc.1`,
+with optional build metadata. It is kept as reported and bounded to the firmware's
+23-character limit. The same board-specific hashrate limits apply to stable and
+prerelease reports; accepting a beta does not imply its release or hardware validation.
+
 That is all they send: no Bitcoin address, worker, pool, name or identifier. This
 [Cloudflare Worker](https://developers.cloudflare.com/workers/) (free plan) adds them up
 in the SQLite storage of a Durable Object. Without an identifier, each report stands for
