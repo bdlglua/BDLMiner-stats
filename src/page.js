@@ -1,7 +1,7 @@
 // The statistics page: one HTML document that reads /api/summary every 20
 // seconds and draws the totals, the 24-hour chart and the breakdowns.
 
-import { POOL_LABELS } from "./pools.js";
+import { POOL_LABELS, POOL_LINKS } from "./pools.js";
 
 export const PAGE = `<!doctype html>
 <html lang="fr">
@@ -36,6 +36,11 @@ export const PAGE = `<!doctype html>
   th { color: var(--muted); font-weight: 500; font-size: 13px; }
   td.num, th.num { text-align: right; }
   .empty { color: var(--muted); }
+  #pools td:first-child { width: 60%; overflow-wrap: anywhere; }
+  #pools a { color: var(--text); text-decoration: none; }
+  #pools a:hover { color: var(--accent); text-decoration: underline; }
+  .pool-site { display: block; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+  #pools td.num { white-space: nowrap; }
   footer { color: var(--muted); font-size: 12px; margin-top: 16px; }
   footer a { color: var(--accent); }
 </style>
@@ -60,12 +65,13 @@ export const PAGE = `<!doctype html>
     <section><h2>Par carte</h2><table id="boards"></table></section>
     <section><h2>Par version</h2><table id="versions"></table></section>
   </div>
-  <section><h2>Par pool</h2><table id="pools"></table><p class="status">Le partage de la pool est facultatif, désactivé par défaut et disponible à partir de BDLMiner 2.0.2. Seul le groupe public est partagé ; les autres pools sont masquées. « Pool non renseignée » inclut les anciennes versions, le partage désactivé et les connexions au pool interrompues.</p></section>
+  <section><h2>Par pool</h2><table id="pools"></table><p class="status">À partir de BDLMiner 2.0.3, le partage de la pool est activé par défaut et désactivable dans les réglages Réseau. Un choix désactivé déjà enregistré est conservé. Le partage du hashrate doit aussi être activé. Les noms des pools mènent à leur site officiel. Seul le groupe public est partagé ; les autres pools sont masquées. « Pool non renseignée » inclut les anciennes versions, le partage désactivé et les connexions au pool interrompues.</p></section>
   <footer>Seuls les miners qui partagent leur hashrate (réglage « Partager mon hashrate anonymement ») sont comptés : un rapport toutes les 5 minutes (toutes les heures avant la version 1.9.2), avec la version, la carte, le hashrate et, sur certains M5Stack, le modèle. La pool publique peut être partagée séparément. Ni adresse Bitcoin, ni worker, ni nom d’hôte privé, ni identifiant. Mise à jour toutes les 20 secondes. <a href="https://github.com/bdlglua/BDLMinerV2">BDLMiner V2</a> · <a href="https://github.com/bdlglua/BDLMiner-stats">code de cette page</a> · <a href="/api/summary">données JSON</a></footer>
 </main>
 <script>
 const UNITS = ["H/s", "kH/s", "MH/s", "GH/s", "TH/s", "PH/s", "EH/s"];
 const POOL_LABELS = ${JSON.stringify(POOL_LABELS)};
+const POOL_LINKS = ${JSON.stringify(POOL_LINKS)};
 function rate(h) {
   if (!(h > 0)) return "0 H/s";
   let i = 0;
@@ -76,10 +82,15 @@ const when = (t) => new Date(t).toLocaleString("fr-FR", { weekday: "short", day:
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-function table(el, rows, label) {
+function table(el, rows, label, cell = (row) => esc(row.name)) {
   if (!rows.length) { el.innerHTML = '<tr><td class="empty">Aucun miner en ce moment.</td></tr>'; return; }
   el.innerHTML = "<tr><th>" + label + '</th><th class="num">Miners</th><th class="num">Hashrate</th></tr>' +
-    rows.map((r) => "<tr><td>" + esc(r.name) + '</td><td class="num">' + r.miners + '</td><td class="num">' + rate(r.hashrate) + "</td></tr>").join("");
+    rows.map((r) => "<tr><td>" + cell(r) + '</td><td class="num">' + r.miners + '</td><td class="num">' + rate(r.hashrate) + "</td></tr>").join("");
+}
+function poolCell(row) {
+  const label = esc(Object.hasOwn(POOL_LABELS, row.name) ? POOL_LABELS[row.name] : POOL_LABELS.other);
+  const url = Object.hasOwn(POOL_LINKS, row.name) ? POOL_LINKS[row.name] : null;
+  return url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + label + '<small class="pool-site">' + esc(url) + '</small></a>' : label;
 }
 
 function chart(points) {
@@ -116,7 +127,7 @@ async function refresh() {
     table($("boards"), s.boards, "Carte");
     table($("versions"), s.versions, "Version");
     const pools = s.pools ?? (s.miners ? [{ name: "unknown", miners: s.miners, hashrate: s.hashrate }] : []);
-    table($("pools"), pools.map((p) => ({ ...p, name: Object.hasOwn(POOL_LABELS, p.name) ? POOL_LABELS[p.name] : POOL_LABELS.other })), "Pool");
+    table($("pools"), pools, "Pool", poolCell);
     $("status").className = "status";
     $("status").textContent = "Mis à jour " + new Date(s.at).toLocaleTimeString("fr-FR");
   } catch (e) {

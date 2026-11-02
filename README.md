@@ -20,8 +20,10 @@ with optional build metadata. It is kept as reported and bounded to the firmware
 23-character limit. The same board-specific hashrate limits apply to stable and
 prerelease reports; accepting a beta does not imply its release or hardware validation.
 
-From BDLMiner 2.0.2, **Share my pool anonymously** (`sharepool`, off by default)
-can add a `pool` group to the existing report. It requires hashrate sharing and
+**Share my pool anonymously** (`sharepool`) can add a `pool` group to the existing
+report. Introduced as default-off in 2.0.2, it is on by default from 2.0.3 for new
+devices and records without the setting; saved disabled choices are preserved.
+Owners can switch it off independently. It requires hashrate sharing and
 an active pool connection. A fixed allowlist maps public hosts and their
 subdomains to `public-pool.io`, `nerdminers.org`, `nerdminer.io`, `ckpool.org`,
 `ocean.xyz`, `braiins.com`, `viabtc.com`, `f2pool.com` or `antpool.com`.
@@ -33,6 +35,9 @@ The summary's `pools` list uses the same live weighting and grace interval as
 the other breakdowns. `unknown` includes older firmware, pool sharing disabled
 and a disconnected pool. It is not an inferred pool name. Old reports remain
 valid and existing samples need no migration. No per-miner pool list is exposed.
+Public pool names link to a predefined official website and show its URL. Links
+come from the collector's fixed catalog, never from a report. Private/other and
+undisclosed groups have no link.
 
 No Bitcoin address, worker, private hostname, name or identifier is sent. This
 [Cloudflare Worker](https://developers.cloudflare.com/workers/) (free plan) adds them up

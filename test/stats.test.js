@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, it } from "node:test";
 import handler, { authorized } from "../src/index.js";
 import { parseReport, Store } from "../src/store.js";
-import { PUBLIC_POOLS } from "../src/pools.js";
+import { PUBLIC_POOLS, POOL_LINKS } from "../src/pools.js";
 
 // The Durable Object's SQL interface (ctx.storage.sql.exec) over node:sqlite.
 function sqlite() {
@@ -39,6 +39,18 @@ const near = (actual, expected, tolerance = 0.03) =>
 describe("stats store", () => {
   let store;
   beforeEach(() => { store = new Store(sqlite()); });
+
+  it("links recognised groups only to fixed public HTTPS websites", () => {
+    assert.deepEqual(Object.keys(POOL_LINKS).sort(), Object.keys(PUBLIC_POOLS).sort());
+    for (const [pool, destination] of Object.entries(POOL_LINKS)) {
+      const url = new URL(destination);
+      assert.equal(url.protocol, 'https:');
+      assert.ok(url.hostname === pool || url.hostname.endsWith('.' + pool));
+      assert.equal(url.username + url.password + url.search + url.hash, '');
+    }
+    assert.equal(Object.hasOwn(POOL_LINKS, 'other'), false);
+    assert.equal(Object.hasOwn(POOL_LINKS, 'unknown'), false);
+  });
 
   it("groups public, private and undisclosed pools without changing the totals", () => {
     const entries = [
@@ -280,7 +292,8 @@ describe("stats worker", () => {
     assert.doesNotMatch(JSON.stringify(summary), /wallet|secret|private\.example/);
     const page = await (await get("/")).text();
     assert.match(page, /<h2>Par pool<\/h2>/);
-    assert.match(page, /désactivé par défaut/);
+    assert.match(page, /BDLMiner 2\.0\.3, le partage de la pool est activé par défaut/);
+    assert.match(page, /Les noms des pools mènent à leur site officiel/);
   });
 
   it("stores real V2 beta report shapes for ESP32 and Gamma while keeping hardware caps", async () => {
