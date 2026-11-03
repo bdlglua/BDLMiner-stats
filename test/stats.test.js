@@ -362,3 +362,18 @@ it("counts BTC and BCH separately without retaining account details", () => {
   for (const coin of ["LTC","DOGE","bch","",1,null,"<script>"])
     assert.equal(parseReport({...base,coin}),null);
 });
+
+
+it("keeps all five SHA-256d profiles separate through storage and restart", () => {
+  const store=new Store(sqlite()), now=1800000000000, tickers=["BTC","BCH","BSV","XEC","DGB"];
+  for(const [i,coin]of tickers.entries()){
+    const report=parseReport({v:"2.2.0",board:"esp32-headless",hashrate:1e6,every:300,coin});
+    assert.equal(report.coin,coin);store.add(report,"sender-"+i,now);
+  }
+  const summary=new Store(store.sql).summary(now+1000);
+  assert.equal(summary.miners,5);assert.equal(summary.hashrate,5e6);
+  assert.deepEqual(new Set(summary.coins.map(x=>x.name)),new Set(tickers));
+  for(const row of summary.coins){assert.equal(row.miners,1);assert.equal(row.hashrate,1e6);}
+  for(const coin of ["NMC","SYS","LTC","DOGE","zec","BSV<script>",{},null])
+    assert.equal(parseReport({v:"2.2.0",board:"esp32-headless",hashrate:1e6,coin}),null);
+});

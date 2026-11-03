@@ -8,7 +8,7 @@ export const PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Hashrate total des miners Bitcoin BDLMiner qui le partagent, en direct.">
+<meta name="description" content="Hashrate total des miners SHA-256d BDLMiner qui le partagent, en direct.">
 <title>BDLMiner · Statistiques</title>
 <style>
   :root { --bg: #0a0d12; --panel: #12171f; --line: #1f2733; --text: #eef1f5; --muted: #8b95a3; --accent: #f7931a; }

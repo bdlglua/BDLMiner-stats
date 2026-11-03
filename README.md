@@ -12,7 +12,7 @@ BDLMiner 1.9.0) post a report every 5 minutes (1.9.0 and 1.9.1: once an hour, wi
 {"v": "1.9.4", "board": "m5stack-esp32", "hashrate": 1.02e6, "every": 300, "model": "M5Stack Core2"}
 ```
 
-`coin` (from 2.1.0) is an optional fixed ticker, `BTC` or `BCH`. Reports without
+`coin` (from 2.1.0) is an optional fixed ticker, `BTC`, `BCH`, `BSV`, `XEC` or `DGB`. Reports without
 it count under BTC. The summary and public page provide a `coins` breakdown.
 It describes the configured profile; the actual chain is supplied by the pool.
 No address, account or worker is added.

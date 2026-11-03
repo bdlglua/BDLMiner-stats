@@ -10,6 +10,7 @@
 // hourly history and the records come from the samples.
 
 import { poolGroup, validPool } from "./pools.js";
+import { validCoin, coinGroup } from "./coins.js";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -89,7 +90,7 @@ export class Store {
       const same = sender === address || (sender === undefined && report.every !== undefined && r.every === DEFAULT_EVERY);
       if (r.board === board && r.v !== v && same && r.t + r.every * 1000 > now) r.every = Math.max(1, (now - r.t) / 1000);
     }
-    const entry = { t: now, every, v, board, hashrate, ...(coin === "BTC" || coin === "BCH" ? { coin } : {}), ...(model ? { model } : {}),
+    const entry = { t: now, every, v, board, hashrate, ...(validCoin(coin) ? { coin } : {}), ...(model ? { model } : {}),
       ...(pool === undefined ? {} : { pool: poolGroup(pool) }) };
     this.live.push(entry);
     this.senders.set(entry, address);
@@ -173,7 +174,7 @@ export class Store {
       live.hashrate += r.hashrate * share;
       // Models: the exact one when the miner tells it (M5Stack), otherwise its board.
       for (const [map, key] of [[live.boards, r.board], [live.versions, r.v], [live.models, `${r.board}\n${r.model ?? ""}`],
-        [live.pools, poolGroup(r.pool)], [live.coins, r.coin === "BCH" ? "BCH" : "BTC"]]) {
+        [live.pools, poolGroup(r.pool)], [live.coins, coinGroup(r.coin)]]) {
         map[key] ??= { miners: 0, hashrate: 0 };
         map[key].miners += share;
         map[key].hashrate += r.hashrate * share;
@@ -274,7 +275,7 @@ export function parseReport(value) {
   // The exact model (M5Stack boards, from 1.9.4): a short name, nothing else.
   if (model !== undefined && (typeof model !== "string" || !/^[A-Za-z0-9 .+()-]{1,39}$/.test(model))) return null;
   if (pool !== undefined && !validPool(pool)) return null;
-  if (coin !== undefined && coin !== "BTC" && coin !== "BCH") return null;
+  if (coin !== undefined && !validCoin(coin)) return null;
   // 1.9.4 also sends a model that only repeats its board ("M5StickC Plus2" for
   // m5stickc-plus2): it tells nothing more.
   const plain = (x) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
