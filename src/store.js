@@ -75,7 +75,7 @@ export class Store {
       if (this.addresses.size > 10000) for (const [a, s] of this.addresses) if (s.until <= now) this.addresses.delete(a);
     }
     this.sampleDue(now);
-    const { v, board, hashrate, every = DEFAULT_EVERY, model, pool } = report;
+    const { v, board, hashrate, every = DEFAULT_EVERY, model, pool, coin } = report;
     // A miner that installs an update restarts and reports again while the
     // report of its previous version still stands for up to an hour: the same
     // board from the same address with another version is that miner, so its
@@ -89,7 +89,7 @@ export class Store {
       const same = sender === address || (sender === undefined && report.every !== undefined && r.every === DEFAULT_EVERY);
       if (r.board === board && r.v !== v && same && r.t + r.every * 1000 > now) r.every = Math.max(1, (now - r.t) / 1000);
     }
-    const entry = { t: now, every, v, board, hashrate, ...(model ? { model } : {}),
+    const entry = { t: now, every, v, board, hashrate, ...(coin === "BTC" || coin === "BCH" ? { coin } : {}), ...(model ? { model } : {}),
       ...(pool === undefined ? {} : { pool: poolGroup(pool) }) };
     this.live.push(entry);
     this.senders.set(entry, address);
@@ -168,12 +168,12 @@ export class Store {
       if (!online[board]) delete online[board];
     }
     const miners = Object.values(online).reduce((a, b) => a + b, 0);
-    const live = { hashrate: 0, boards: {}, versions: {}, models: {}, pools: {} };
+    const live = { hashrate: 0, boards: {}, versions: {}, models: {}, pools: {}, coins: {} };
     const weigh = (r, share) => {
       live.hashrate += r.hashrate * share;
       // Models: the exact one when the miner tells it (M5Stack), otherwise its board.
       for (const [map, key] of [[live.boards, r.board], [live.versions, r.v], [live.models, `${r.board}\n${r.model ?? ""}`],
-        [live.pools, poolGroup(r.pool)]]) {
+        [live.pools, poolGroup(r.pool)], [live.coins, r.coin === "BCH" ? "BCH" : "BTC"]]) {
         map[key] ??= { miners: 0, hashrate: 0 };
         map[key].miners += share;
         map[key].hashrate += r.hashrate * share;
@@ -234,6 +234,7 @@ export class Store {
       boards: breakdown(live.boards),
       versions: breakdown(live.versions),
       pools: breakdown(live.pools),
+      coins: breakdown(live.coins),
       models: breakdown(live.models).map(({ name, ...x }) => {
         const [board, model] = name.split("\n");
         return { board, model: model || null, ...x };
@@ -259,7 +260,7 @@ const maxHashrate = (board) => (Object.hasOwn(ASIC_MAX, board) ? ASIC_MAX[board]
 // What a miner sends (src/share.cpp in BDLMinerV2); null for anything else.
 export function parseReport(value) {
   if (!value || typeof value !== "object") return null;
-  const { v, board, hashrate, every, model, pool } = value;
+  const { v, board, hashrate, every, model, pool, coin } = value;
   // Firmware versions fit 23 characters and may be SemVer prereleases/builds.
   // Keep the original bounds on core components and reject leading zeroes in
   // numeric prerelease identifiers; labels are stored exactly as reported.
@@ -273,10 +274,11 @@ export function parseReport(value) {
   // The exact model (M5Stack boards, from 1.9.4): a short name, nothing else.
   if (model !== undefined && (typeof model !== "string" || !/^[A-Za-z0-9 .+()-]{1,39}$/.test(model))) return null;
   if (pool !== undefined && !validPool(pool)) return null;
+  if (coin !== undefined && coin !== "BTC" && coin !== "BCH") return null;
   // 1.9.4 also sends a model that only repeats its board ("M5StickC Plus2" for
   // m5stickc-plus2): it tells nothing more.
   const plain = (x) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
   const tells = model !== undefined && plain(model) !== plain(board);
   return { v, board, hashrate, ...(every !== undefined ? { every } : {}), ...(tells ? { model } : {}),
-    ...(pool === undefined ? {} : { pool }) };
+    ...(pool === undefined ? {} : { pool }), ...(coin === undefined ? {} : { coin }) };
 }

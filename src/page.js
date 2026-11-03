@@ -65,8 +65,9 @@ export const PAGE = `<!doctype html>
     <section><h2>Par carte</h2><table id="boards"></table></section>
     <section><h2>Par version</h2><table id="versions"></table></section>
   </div>
+  <section><h2>Par cryptomonnaie</h2><table id="coins"></table></section>
   <section><h2>Par pool</h2><table id="pools"></table><p class="status">À partir de BDLMiner 2.0.3, le partage de la pool est activé par défaut et désactivable dans les réglages Réseau. Un choix désactivé déjà enregistré est conservé. Le partage du hashrate doit aussi être activé. Les noms des pools mènent à leur site officiel. Seul le groupe public est partagé ; les autres pools sont masquées. « Pool non renseignée » inclut les anciennes versions, le partage désactivé et les connexions au pool interrompues.</p></section>
-  <footer>Seuls les miners qui partagent leur hashrate (réglage « Partager mon hashrate anonymement ») sont comptés : un rapport toutes les 5 minutes (toutes les heures avant la version 1.9.2), avec la version, la carte, le hashrate et, sur certains M5Stack, le modèle. La pool publique peut être partagée séparément. Ni adresse Bitcoin, ni worker, ni nom d’hôte privé, ni identifiant. Mise à jour toutes les 20 secondes. <a href="https://github.com/bdlglua/BDLMinerV2">BDLMiner V2</a> · <a href="https://github.com/bdlglua/BDLMiner-stats">code de cette page</a> · <a href="/api/summary">données JSON</a></footer>
+  <footer>Seuls les miners qui partagent leur hashrate (réglage « Partager mon hashrate anonymement ») sont comptés : un rapport toutes les 5 minutes (toutes les heures avant la version 1.9.2), avec la version, la carte, la cryptomonnaie (BTC par défaut pour les anciennes versions), le hashrate et, sur certains M5Stack, le modèle. La pool publique peut être partagée séparément. Ni adresse Bitcoin, ni worker, ni nom d’hôte privé, ni identifiant. Mise à jour toutes les 20 secondes. <a href="https://github.com/bdlglua/BDLMinerV2">BDLMiner V2</a> · <a href="https://github.com/bdlglua/BDLMiner-stats">code de cette page</a> · <a href="/api/summary">données JSON</a></footer>
 </main>
 <script>
 const UNITS = ["H/s", "kH/s", "MH/s", "GH/s", "TH/s", "PH/s", "EH/s"];
@@ -126,6 +127,7 @@ async function refresh() {
     chart(s.recent);
     table($("boards"), s.boards, "Carte");
     table($("versions"), s.versions, "Version");
+    table($("coins"), s.coins ?? [], "Cryptomonnaie");
     const pools = s.pools ?? (s.miners ? [{ name: "unknown", miners: s.miners, hashrate: s.hashrate }] : []);
     table($("pools"), pools, "Pool", poolCell);
     $("status").className = "status";

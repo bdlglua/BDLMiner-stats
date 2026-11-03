@@ -12,6 +12,11 @@ BDLMiner 1.9.0) post a report every 5 minutes (1.9.0 and 1.9.1: once an hour, wi
 {"v": "1.9.4", "board": "m5stack-esp32", "hashrate": 1.02e6, "every": 300, "model": "M5Stack Core2"}
 ```
 
+`coin` (from 2.1.0) is an optional fixed ticker, `BTC` or `BCH`. Reports without
+it count under BTC. The summary and public page provide a `coins` breakdown.
+It describes the configured profile; the actual chain is supplied by the pool.
+No address, account or worker is added.
+
 `model` (from 1.9.4) only comes when the board tells more than its firmware: the M5Stack
 firmware serves several models, which the summary's `models` list tells apart.
 
@@ -58,7 +63,7 @@ previous report then ends, so that it is not counted twice. It is never stored.
 | Path | Access | What |
 |---|---|---|
 | `POST /report` | Miners | One report; 204 when stored, 400 when malformed, 429 over the limit |
-| `GET /` | Everyone | The statistics page: total hashrate, miners, average, best hour, 24-hour chart, by board, version and pool |
+| `GET /` | Everyone | The statistics page: total hashrate, miners, average, best hour, 24-hour chart, by board, version, cryptocurrency and pool |
 | `GET /api/summary` | Everyone | The same as JSON, with `pools` (name, miners, hashrate), `recent` (5-minute samples over 24 hours, then now), `history` (hourly, 7 days) and `fleet` (online / offline per board); cached 15 s, readable from any site |
 
 The figures hold nothing about any one miner. To make them private, set a

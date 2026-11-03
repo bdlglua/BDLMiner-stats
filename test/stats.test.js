@@ -346,3 +346,19 @@ describe("stats worker", () => {
     assert.equal(authorized(new Request("https://x/", { headers: { Authorization: "Basic !!!" } }), "p"), false);
   });
 });
+
+
+it("counts BTC and BCH separately without retaining account details", () => {
+  const store = new Store(sqlite()), now = 1800000000000;
+  const base = {v:"2.1.0",board:"esp32-headless",hashrate:1e6,every:300};
+  for (const coin of ["BTC","BCH"]) {
+    const parsed = parseReport({...base,coin,worker:"private",address:"secret"});
+    assert.equal(parsed.coin,coin);assert.equal(parsed.worker,undefined);assert.equal(parsed.address,undefined);
+    store.add(parsed,coin,now);
+  }
+  store.add(base,"legacy",now);
+  const result = new Store(store.sql).summary(now+1000);
+  assert.deepEqual(result.coins,[{name:"BTC",miners:2,hashrate:2e6},{name:"BCH",miners:1,hashrate:1e6}]);
+  for (const coin of ["LTC","DOGE","bch","",1,null,"<script>"])
+    assert.equal(parseReport({...base,coin}),null);
+});
