@@ -73,7 +73,9 @@ jobs:
           key = secrets.token_hex(32)
           other = secrets.token_hex(32)
           def call(path, method='GET', body=None, access=key):
-              headers = {'Authorization': 'Bearer ' + access} if access else {}
+              headers = {'User-Agent':'BDLMiner-deployment-check/2.3.0', 'Cache-Control':'no-cache'}
+              if access:
+                  headers['Authorization'] = 'Bearer ' + access
               if body is not None:
                   headers['Content-Type'] = 'application/json'
               req = urllib.request.Request(base + path, None if body is None else json.dumps(body).encode(), headers, method=method)
@@ -82,10 +84,12 @@ jobs:
                       raw = response.read()
                       return response.status, json.loads(raw) if raw and 'application/json' in response.headers.get('Content-Type', '') else None
               except urllib.error.HTTPError as error:
-                  return error.code, None
+                  return error.code, {'error':error.read(256).decode(errors='replace')}
           for attempt in range(15):
-              if call('/remote', access=None)[0] == 200:
+              result = call('/remote', access=None)
+              if result[0] == 200:
                   break
+              print('Remote viewer HTTP', result[0], repr(result[1]), flush=True)
               time.sleep(2)
           else:
               raise RuntimeError('Remote viewer was not deployed')
