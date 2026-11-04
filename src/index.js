@@ -17,6 +17,27 @@ const privateHeaders = {
 };
 const privateJSON = (value, status = 200) => Response.json(value, { status, headers: privateHeaders });
 
+function remoteCors(request, env, url) {
+  const origin = request.headers.get('Origin');
+  const viewer = env.REMOTE_VIEWER_ORIGIN || 'https://bdlglua.github.io';
+  if (origin && origin !== viewer && origin !== url.origin)
+    return { error: privateJSON({ error: 'Origin not allowed' }, 403) };
+  if (origin && url.pathname === '/api/remote/report')
+    return { error: privateJSON({ error: 'Browser reports are not allowed' }, 403) };
+  const cors = origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {};
+  if (request.method === 'OPTIONS') {
+    const method = request.headers.get('Access-Control-Request-Method');
+    const headers = (request.headers.get('Access-Control-Request-Headers') || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
+    const methods = url.pathname === '/api/remote' ? ['GET', 'DELETE'] : url.pathname === '/api/remote/history' ? ['GET'] : [];
+    if (!origin || !methods.includes(method) || headers.some(x => !['authorization', 'content-type'].includes(x)))
+      return { error: privateJSON({ error: 'Preflight not allowed' }, 403) };
+    return { error: new Response(null, { status: 204, headers: { ...privateHeaders, ...cors,
+      'Access-Control-Allow-Methods': methods.join(', '), 'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+      'Access-Control-Max-Age': '600' } }) };
+  }
+  return { headers: cors };
+}
+
 async function remoteBody(request) {
   if (!(request.headers.get('Content-Type') ?? '').startsWith('application/json')) return { status: 415 };
   const reader = request.body?.getReader();
@@ -103,7 +124,17 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (url.pathname.startsWith('/api/remote')) return privateRoute(request, env, url);
+    if (url.pathname.startsWith('/api/remote')) {
+      const cors = remoteCors(request, env, url);
+      if (cors.error) return cors.error;
+      const response = await privateRoute(request, env, url);
+      for (const [name, value] of Object.entries(cors.headers)) response.headers.set(name, value);
+      return response;
+    }
+    if ((url.pathname === '/remote' || url.pathname === '/remote/') && env.REMOTE_VIEWER_REDIRECT === 'true') {
+      if (request.method !== 'GET') return privateJSON({ error: 'GET only' }, 405);
+      return new Response(null, { status: 302, headers: { ...privateHeaders, Location: 'https://bdlglua.github.io/remote/' } });
+    }
     const remoteAsset = { '/remote': [REMOTE_PAGE, 'text/html; charset=utf-8'],
       '/remote.js': [REMOTE_APP, 'text/javascript; charset=utf-8'], '/remote.css': [REMOTE_STYLE, 'text/css; charset=utf-8'] }[url.pathname];
     if (remoteAsset) {

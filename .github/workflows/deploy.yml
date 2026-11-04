@@ -94,6 +94,22 @@ jobs:
           else:
               raise RuntimeError('Remote viewer was not deployed')
           assert call('/api/remote', access=None)[0] == 401
+          origin = 'https://bdlglua.github.io'
+          preflight = urllib.request.Request(base + '/api/remote', headers={
+              'User-Agent':'BDLMiner-deployment-check/2.3.0', 'Origin':origin,
+              'Access-Control-Request-Method':'GET', 'Access-Control-Request-Headers':'authorization'}, method='OPTIONS')
+          with urllib.request.urlopen(preflight, timeout=20) as response:
+              assert response.status == 204
+              assert response.headers['Access-Control-Allow-Origin'] == origin
+              assert response.headers.get('Access-Control-Allow-Credentials') is None
+          guarded = urllib.request.Request(base + '/api/remote', headers={
+              'User-Agent':'BDLMiner-deployment-check/2.3.0', 'Origin':origin})
+          try:
+              urllib.request.urlopen(guarded, timeout=20)
+              raise RuntimeError('A private read was allowed without a key')
+          except urllib.error.HTTPError as error:
+              assert error.code == 401
+              assert error.headers['Access-Control-Allow-Origin'] == origin
           fixture = {'id':'0000000000000001','name':'Deployment smoke (simulated)',
               'v':'2.3.0','board':'m5stickc-plus2','coin':'BTC','boot_id':'00000001',
               'uptime_s':60,'hashrate':0,'total_hashes':0,'temp_c':None,
@@ -108,5 +124,5 @@ jobs:
               assert call('/api/remote', access=other, method='DELETE')[0] == 204
           assert call('/api/remote')[0] == 410
           assert call('/api/remote/report', 'POST', fixture)[0] == 410
-          print('PASS deployed private monitoring: authorization, isolated data and permanent revocation; simulated readings erased.')
+          print('PASS deployed private monitoring: GitHub Pages CORS, authorization, isolated data and permanent revocation; simulated readings erased.')
           PY

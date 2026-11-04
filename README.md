@@ -60,7 +60,7 @@ previous report then ends, so that it is not counted twice. It is never stored.
 
 ## Private remote monitoring
 
-The separate `/remote` page lets owners monitor their own paired miners without
+The [GitHub Pages `/remote/` viewer](https://bdlglua.github.io/remote/) lets owners monitor their own paired miners without
 a local hub. From BDLMiner 2.3.0, an explicit opt-in sends selected readings every
 five minutes using a browser-generated 256-bit key. Personal names and keyed
 pseudonymous miner IDs are isolated from the anonymous aggregate above.
@@ -76,9 +76,19 @@ stored readings. Details: [pairing, data and revocation](https://github.com/bdlg
 `GET /api/remote`, `GET /api/remote/history?miner=<id>&hours=24` and
 `DELETE /api/remote` require `Authorization: Bearer <personal-key>` even if the
 public page is open. Paired boards use `POST /api/remote/report`. All private
-responses use `no-store`, no cross-origin read permission, bounded inputs and
+responses use `no-store`, an exact GitHub Pages origin allowlist, bounded inputs and
 finite telemetry fields; payouts, workers, raw MACs and private pool hosts are
 excluded. These reports never contribute to `/api/summary`.
+
+The private interface is exported from the same source as the legacy Worker page:
+`node scripts/build-remote-site.js <site-directory>/remote` writes three static
+files plus their source/digest manifest. The root website's workflow builds and
+publishes them on GitHub Pages. The interface sends bearer-authenticated requests
+to this Worker with cookies omitted. Browser origins outside the configured
+viewer origin and the service's own origin are refused; preflight does not grant
+access without a key. Firmware reports continue using their existing endpoint.
+After the GitHub page is published, `REMOTE_VIEWER_REDIRECT=true` sends legacy
+`/remote` links to the new address without forwarding any query string.
 
 ## Endpoints
 
