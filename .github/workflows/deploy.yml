@@ -68,7 +68,7 @@ jobs:
         if: steps.config.outputs.ready == 'true'
         run: |
           python3 - <<'PY'
-          import json, secrets, time, urllib.error, urllib.request
+          import json, os, secrets, time, urllib.error, urllib.request
           base = 'https://bdlminer-stats.bdlminer-bot.workers.dev'
           key = secrets.token_hex(32)
           other = secrets.token_hex(32)
@@ -95,15 +95,26 @@ jobs:
               raise RuntimeError('Remote viewer was not deployed')
           assert call('/api/remote', access=None)[0] == 401
           origin = 'https://bdlglua.github.io'
-          preflight = urllib.request.Request(base + '/api/remote', headers={
-              'User-Agent':'BDLMiner-deployment-check/2.3.0', 'Origin':origin,
+          probe = base + '/api/remote?deployment=' + os.environ['GITHUB_SHA']
+          preflight = urllib.request.Request(probe, headers={
+              'User-Agent':'BDLMiner-deployment-check/2.3.0', 'Origin':origin, 'Cache-Control':'no-cache',
               'Access-Control-Request-Method':'GET', 'Access-Control-Request-Headers':'authorization'}, method='OPTIONS')
-          with urllib.request.urlopen(preflight, timeout=20) as response:
-              assert response.status == 204
-              assert response.headers['Access-Control-Allow-Origin'] == origin
-              assert response.headers.get('Access-Control-Allow-Credentials') is None
-          guarded = urllib.request.Request(base + '/api/remote', headers={
-              'User-Agent':'BDLMiner-deployment-check/2.3.0', 'Origin':origin})
+          for attempt in range(30):
+              try:
+                  with urllib.request.urlopen(preflight, timeout=20) as response:
+                      assert response.status == 204
+                      assert response.headers['Access-Control-Allow-Origin'] == origin
+                      assert response.headers.get('Access-Control-Allow-Credentials') is None
+                  break
+              except (urllib.error.HTTPError, AssertionError) as error:
+                  if isinstance(error, urllib.error.HTTPError):
+                      print('Preflight response:', error.code, error.headers.get('Server'), repr(error.read(200).decode(errors='replace')), flush=True)
+                  if attempt == 29:
+                      raise
+                  print('Waiting for deployed GitHub-origin preflight:', getattr(error, 'code', 'headers'), flush=True)
+                  time.sleep(2)
+          guarded = urllib.request.Request(probe, headers={
+              'User-Agent':'BDLMiner-deployment-check/2.3.0', 'Origin':origin, 'Cache-Control':'no-cache'})
           try:
               urllib.request.urlopen(guarded, timeout=20)
               raise RuntimeError('A private read was allowed without a key')
