@@ -6,8 +6,8 @@ logpush = false
 
 [vars]
 REMOTE_VIEWER_ORIGIN = "https://bdlglua.github.io"
-# Turn on only after the GitHub Pages viewer has been published.
-REMOTE_VIEWER_REDIRECT = "false"
+# Legacy bookmarks and existing firmware links open the GitHub Pages viewer.
+REMOTE_VIEWER_REDIRECT = "true"
 
 # The reports, in the SQLite storage of one Durable Object (free plan).
 [[durable_objects.bindings]]

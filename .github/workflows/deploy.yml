@@ -68,7 +68,8 @@ jobs:
         if: steps.config.outputs.ready == 'true'
         run: |
           python3 - <<'PY'
-          import json, os, secrets, time, urllib.error, urllib.request
+          import json, os, secrets, time, tomllib, urllib.error, urllib.request
+          from pathlib import Path
           base = 'https://bdlminer-stats.bdlminer-bot.workers.dev'
           key = secrets.token_hex(32)
           other = secrets.token_hex(32)
@@ -93,6 +94,24 @@ jobs:
               time.sleep(2)
           else:
               raise RuntimeError('Remote viewer was not deployed')
+          redirect_enabled = tomllib.loads(Path('wrangler.toml').read_text())['vars']['REMOTE_VIEWER_REDIRECT'] == 'true'
+          if redirect_enabled:
+              class NoRedirect(urllib.request.HTTPRedirectHandler):
+                  def redirect_request(self, *args):
+                      return None
+              opener = urllib.request.build_opener(NoRedirect)
+              for attempt in range(30):
+                  try:
+                      response = opener.open(urllib.request.Request(base + '/remote', headers={
+                          'User-Agent':'BDLMiner-deployment-check/2.3.0','Cache-Control':'no-cache'}), timeout=20)
+                      response.close()
+                  except urllib.error.HTTPError as error:
+                      if error.code == 302 and error.headers.get('Location') == 'https://bdlglua.github.io/remote/':
+                          break
+                  if attempt == 29:
+                      raise RuntimeError('Legacy viewer redirect was not activated')
+                  time.sleep(2)
+              print('PASS legacy viewer: redirects to https://bdlglua.github.io/remote/', flush=True)
           assert call('/api/remote', access=None)[0] == 401
           origin = 'https://bdlglua.github.io'
           probe = base + '/api/remote?deployment=' + os.environ['GITHUB_SHA']
