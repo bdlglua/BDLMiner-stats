@@ -2,15 +2,25 @@ name = "bdlminer-stats"
 main = "src/worker.js"
 compatibility_date = "2026-09-01"
 workers_dev = true
+logpush = false
 
 # The reports, in the SQLite storage of one Durable Object (free plan).
 [[durable_objects.bindings]]
 name = "STORE"
 class_name = "StatsStore"
 
+[[durable_objects.bindings]]
+name = "REMOTE"
+class_name = "RemoteStore"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["StatsStore"]
 
+[[migrations]]
+tag = "private-v1"
+new_sqlite_classes = ["RemoteStore"]
+
 [observability]
-enabled = true
+# Private bearer keys and request metadata must not enter invocation logs.
+enabled = false

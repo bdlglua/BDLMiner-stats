@@ -11,13 +11,16 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - run: npm ci
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
 
   deploy:
     needs: test
@@ -60,3 +63,46 @@ jobs:
           else
             $WRANGLER secret delete STATS_PASSWORD --force 2>/dev/null || true
           fi
+
+      - name: Verify deployed private monitoring and revocation
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          python3 - <<'PY'
+          import json, secrets, time, urllib.error, urllib.request
+          base = 'https://bdlminer-stats.bdlminer-bot.workers.dev'
+          key = secrets.token_hex(32)
+          other = secrets.token_hex(32)
+          def call(path, method='GET', body=None, access=key):
+              headers = {'Authorization': 'Bearer ' + access} if access else {}
+              if body is not None:
+                  headers['Content-Type'] = 'application/json'
+              req = urllib.request.Request(base + path, None if body is None else json.dumps(body).encode(), headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as response:
+                      raw = response.read()
+                      return response.status, json.loads(raw) if raw and 'application/json' in response.headers.get('Content-Type', '') else None
+              except urllib.error.HTTPError as error:
+                  return error.code, None
+          for attempt in range(15):
+              if call('/remote', access=None)[0] == 200:
+                  break
+              time.sleep(2)
+          else:
+              raise RuntimeError('Remote viewer was not deployed')
+          assert call('/api/remote', access=None)[0] == 401
+          fixture = {'id':'0000000000000001','name':'Deployment smoke (simulated)',
+              'v':'2.3.0','board':'m5stickc-plus2','coin':'BTC','boot_id':'00000001',
+              'uptime_s':60,'hashrate':0,'total_hashes':0,'temp_c':None,
+              'accepted':0,'rejected':0,'best':0,'power_percent':0,
+              'pool_connected':False,'pool':'unknown','firmware_trial':False}
+          try:
+              assert call('/api/remote/report', 'POST', fixture)[0] == 204
+              assert len(call('/api/remote')[1]['miners']) == 1
+              assert call('/api/remote', access=other)[1]['miners'] == []
+          finally:
+              assert call('/api/remote', 'DELETE')[0] == 204
+              assert call('/api/remote', access=other, method='DELETE')[0] == 204
+          assert call('/api/remote')[0] == 410
+          assert call('/api/remote/report', 'POST', fixture)[0] == 410
+          print('PASS deployed private monitoring: authorization, isolated data and permanent revocation; simulated readings erased.')
+          PY

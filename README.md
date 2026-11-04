@@ -58,6 +58,28 @@ limits the number of reports (400 an hour per address) and, in memory, recognise
 miner that restarts on a new version (same address, same board, another version): its
 previous report then ends, so that it is not counted twice. It is never stored.
 
+## Private remote monitoring
+
+The separate `/remote` page lets owners monitor their own paired miners without
+a local hub. From BDLMiner 2.3.0, an explicit opt-in sends selected readings every
+five minutes using a browser-generated 256-bit key. Personal names and keyed
+pseudonymous miner IDs are isolated from the anonymous aggregate above.
+
+Each key maps to a separate `RemoteStore` Durable Object by its SHA-256 digest;
+the raw key is not stored. Up to 32 miners share a space, with seven-day history.
+The page keeps the key only in memory, has no third-party resources, and cannot
+control miners. Deletion erases readings and permanently revokes the key; only a
+minimal revocation marker remains. Request addresses are kept in memory only for
+an admission limit of 600 requests/hour/address. The hosting operator can access
+stored readings. Details: [pairing, data and revocation](https://github.com/bdlglua/BDLMinerV2/blob/main/docs/remote-access.md).
+
+`GET /api/remote`, `GET /api/remote/history?miner=<id>&hours=24` and
+`DELETE /api/remote` require `Authorization: Bearer <personal-key>` even if the
+public page is open. Paired boards use `POST /api/remote/report`. All private
+responses use `no-store`, no cross-origin read permission, bounded inputs and
+finite telemetry fields; payouts, workers, raw MACs and private pool hosts are
+excluded. These reports never contribute to `/api/summary`.
+
 ## Endpoints
 
 | Path | Access | What |
