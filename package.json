@@ -9,6 +9,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:browser": "node scripts/remote-browser.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1",
+    "wrangler": "4.150.0"
   }
 }

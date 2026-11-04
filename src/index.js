@@ -5,8 +5,64 @@
 
 import { parseReport } from "./store.js";
 import { PAGE } from "./page.js";
+import { parseRemote, remoteKey } from './remote.js';
+import { REMOTE_PAGE, REMOTE_APP, REMOTE_STYLE } from './remote-page.js';
 
 const MAX_BODY = 512;
+
+const privateHeaders = {
+  'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow',
+  'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
+  'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+};
+const privateJSON = (value, status = 200) => Response.json(value, { status, headers: privateHeaders });
+
+async function remoteBody(request) {
+  if (!(request.headers.get('Content-Type') ?? '').startsWith('application/json')) return { status: 415 };
+  const reader = request.body?.getReader();
+  if (!reader) return { status: 400 };
+  const chunks = []; let length = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    length += value.byteLength;
+    if (length > 2048) { await reader.cancel(); return { status: 413 }; }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(length); let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  try { return { report: parseRemote(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))) }; }
+  catch { return { status: 400 }; }
+}
+
+async function privateRoute(request, env, url) {
+  const routes = ['/api/remote', '/api/remote/report', '/api/remote/history'];
+  if (!routes.includes(url.pathname)) return privateJSON({ error: 'Not found' }, 404);
+  const expected = url.pathname.endsWith('/report') ? ['POST'] : url.pathname.endsWith('/history') ? ['GET'] : ['GET', 'DELETE'];
+  if (!expected.includes(request.method)) return privateJSON({ error: 'Method not allowed' }, 405);
+  const key = await remoteKey(request);
+  if (!key) return privateJSON({ error: 'Private access key required' }, 401);
+  if (!await store(env).remoteAllowed(request.headers.get('CF-Connecting-IP') ?? ''))
+    return privateJSON({ error: 'Please wait before trying again' }, 429);
+  const remote = env.REMOTE.get(env.REMOTE.idFromName(key));
+  if (request.method === 'POST') {
+    const body = await remoteBody(request);
+    if (body.status || !body.report) return privateJSON({ error: 'Invalid private report' }, body.status || 400);
+    const status = await remote.add(body.report);
+    return new Response(null, { status, headers: privateHeaders });
+  }
+  if (request.method === 'DELETE') {
+    await remote.revoke();
+    return new Response(null, { status: 204, headers: privateHeaders });
+  }
+  const snapshot = await remote.snapshot();
+  if (snapshot === null) return privateJSON({ error: 'This access key has been revoked' }, 410);
+  if (url.pathname.endsWith('/history')) {
+    const history = await remote.history(url.searchParams.get('miner') ?? '', Number(url.searchParams.get('hours') ?? 24));
+    return history ? privateJSON(history) : privateJSON({ error: 'Invalid history window' }, 400);
+  }
+  return privateJSON(snapshot);
+}
 
 function store(env) {
   return env.STORE.get(env.STORE.idFromName("global"));
@@ -46,6 +102,14 @@ function headers(env, type) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith('/api/remote')) return privateRoute(request, env, url);
+    const remoteAsset = { '/remote': [REMOTE_PAGE, 'text/html; charset=utf-8'],
+      '/remote.js': [REMOTE_APP, 'text/javascript; charset=utf-8'], '/remote.css': [REMOTE_STYLE, 'text/css; charset=utf-8'] }[url.pathname];
+    if (remoteAsset) {
+      if (request.method !== 'GET') return privateJSON({ error: 'GET only' }, 405);
+      return new Response(remoteAsset[0], { headers: { ...privateHeaders, 'Content-Type': remoteAsset[1] } });
+    }
 
     if (url.pathname === "/report") {
       if (request.method !== "POST") return new Response("POST only", { status: 405 });
