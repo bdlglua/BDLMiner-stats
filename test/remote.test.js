@@ -90,6 +90,15 @@ describe('private remote monitoring', () => {
     for (const change of [{ id: '../bad' }, { coin: 'DOGE' }, { hashrate: Infinity }, { hashrate: 1e15 }, { hashrate: -1 }, { accepted: 1.2 }, { temp_c: 200 }, { power_percent: 101 }, { pool: '192.168.1.10' }, { boot_id: 'private' }, { name: 'x'.repeat(49) }, { name: 'line\nfeed' }, { pool_connected: 'yes' }])
       assert.equal(parseRemote({ ...report(), ...change }), null, JSON.stringify(change));
   });
+  it('retains Peercoin in private monitoring without adding it to public totals', async () => {
+    const env = environment();
+    const ppc = { ...report(), v: '2.4.0', coin: 'PPC', pool: 'other' };
+    assert.equal((await handler.fetch(request('/api/remote/report', keyA, 'POST', ppc), env)).status, 204);
+    const mine = await (await handler.fetch(request('/api/remote', keyA), env)).json();
+    assert.equal(mine.miners[0].coin, 'PPC');
+    assert.equal(mine.hashrate, ppc.hashrate);
+    assert.equal(env.publicStore.summary().miners, 0);
+  });
   it('isolates access keys and never adds personal reports to public statistics', async () => {
     const env = environment();
     assert.equal((await handler.fetch(request('/api/remote/report', keyA, 'POST', report()), env)).status, 204);
