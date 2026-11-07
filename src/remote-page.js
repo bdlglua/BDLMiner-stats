@@ -141,10 +141,10 @@ function draw(){
  $('history-note').textContent=t(!pts.length?'No history yet.':pts.length===1?'Only one reading in this period. Reports arrive every five minutes.':'Statistics use received reports. Missing periods are left empty.');
  $('chart-empty').hidden=!!values.length;
  if(!values.length){$('chart-empty').textContent=t(pts.length?'No temperature readings.':'No history yet.');$('chart-tooltip').hidden=true;plot=null;return}
- const interval=series.interval_ms,end=series.window_end||Date.now(),windowStart=series.window_start||end-series.hours*3600000;
+ const interval=series.interval_ms,windowEnd=series.window_end||Date.now(),windowStart=series.window_start||windowEnd-series.hours*3600000;
  // Show the available history rather than compressing a new miner into the
  // final few pixels of a day. The selected period remains the maximum window.
- const start=Math.max(windowStart,Math.min(pts[0].t-interval*.5,end-interval*2));
+ const start=Math.max(windowStart,pts[0].t),end=Math.max(windowEnd,start+1);
  const raw=values.flatMap(p=>chartMetric==='rate'?[p.min_rate??p.rate,p.max_rate??p.rate]:[p.temp,p.max_temp??p.temp]);
  const low=Math.min(...raw),high=Math.max(...raw),padding=Math.max((high-low)*.15,Math.abs(high)*.035,.01);
  const min=chartMetric==='rate'?Math.max(0,low-padding):low-padding,max=high+padding;

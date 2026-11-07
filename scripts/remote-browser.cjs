@@ -51,9 +51,13 @@ async function main(){
    await page.locator('#hours').selectOption('1');await(await response).finished();
    await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
    return page.locator('#chart').evaluate(canvas=>{
-    const {data}=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height),columns=new Set();let pixels=0;
-    for(let i=0;i<data.length;i+=4)if(data[i]>180&&data[i+1]>60&&data[i+1]<190&&data[i+2]<70&&data[i+3]>100){pixels++;columns.add(i/4%canvas.width)}
-    return {pixels,columns:columns.size};
+    const {data}=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height),columns=new Set();let pixels=0,gridLeft=canvas.width;
+    for(let i=0;i<data.length;i+=4){
+     const x=i/4%canvas.width;
+     if(data[i]>180&&data[i+1]>60&&data[i+1]<190&&data[i+2]<70&&data[i+3]>100){pixels++;columns.add(x)}
+     if(data[i]===48&&data[i+1]===50&&data[i+2]===60&&data[i+3]>100)gridLeft=Math.min(gridLeft,x);
+    }
+    return {pixels,columns:columns.size,firstColumn:columns.size?Math.min(...columns):null,gridLeft};
    });
   }
   const now=Date.now(),point=(minutes,extra={})=>({t:now-minutes*60000,rate:1e12,temp:50,samples:1,boot:'aabbccdd',mixed_boots:false,...extra});
@@ -68,7 +72,8 @@ async function main(){
   const empty=await chart([],{reports:0,restarts:0});assert.equal(empty.pixels,0);assert.match(await page.locator('#history-note').textContent(),/Pas encore/);
   assert.equal(await page.locator('#export-history').isDisabled(),true);assert.equal(await page.locator('#stat-average').textContent(),'—');
   const readings=[.9,1,1.1,1.1,1,.9].map((rate,i)=>point(25-i*5,{rate:rate*1e12,temp:[48,49,50,51,50,49][i]}));
-  await chart(readings,{reports:6,average:1e12,minimum:.9e12,maximum:1.1e12,temperature_average:49.5,temperature_maximum:51,variation_percent:8.16496580927726,restarts:0,first_at:readings[0].t,last_at:readings[5].t});
+  const rendered=await chart(readings,{reports:6,average:1e12,minimum:.9e12,maximum:1.1e12,temperature_average:49.5,temperature_maximum:51,variation_percent:8.16496580927726,restarts:0,first_at:readings[0].t,last_at:readings[5].t});
+  assert.ok(Math.abs(rendered.firstColumn-rendered.gridLeft)<=2,'the first reading must start at the left edge of the plot, without an empty time margin');
   assert.equal(await page.locator('#stat-average').textContent(),'1 TH/s');assert.equal(await page.locator('#stat-maximum').textContent(),'1,1 TH/s');
   assert.match(await page.locator('#stat-minimum').textContent(),/900 GH\/s/);assert.match(await page.locator('#stat-variation').textContent(),/8,2 %/);
   assert.equal(await page.locator('#stat-temperature').textContent(),'49,5 °C');assert.equal(await page.locator('#stat-reports').textContent(),'6');
