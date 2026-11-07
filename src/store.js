@@ -214,13 +214,33 @@ export class Store {
     const hours = new Map();
     for (const s of samples) {
       const h = Math.floor((s.t - 1) / HOUR) * HOUR;
-      const e = hours.get(h) ?? { at: h, hashrate: 0, miners: 0, n: 0 };
+      const e = hours.get(h) ?? { at: h, hashrate: 0, miners: 0, n: 0, first_at: s.t, end_at: s.t };
       e.hashrate += s.hashrate; e.miners += s.miners; e.n++;
+      e.end_at = s.t;
       hours.set(h, e);
     }
     const thisHour = Math.floor(now / HOUR) * HOUR;
+    const hourPoint = h => ({ at: h.at, end_at: h.end_at, first_at: h.first_at,
+      hashrate: h.hashrate / h.n, miners: Math.round(h.miners / h.n), average_miners: h.miners / h.n, samples: h.n,
+      interval_ms: HOUR, missing: h.n < Math.max(1, Math.floor((Math.min(now, h.at + HOUR) - h.at) / SAMPLE)) });
     const history = [...hours.values()].filter((h) => h.at < thisHour)
-      .map((h) => ({ at: h.at, hashrate: h.hashrate / h.n, miners: Math.round(h.miners / h.n) }));
+      .map(hourPoint);
+    // Period indicators use the original five-minute totals, excluding the
+    // instantaneous live reading. Hourly means alone would bias sparse hours.
+    const periods = Object.fromEntries([1, 6, 24, 168].map(duration => {
+      const from = now - duration * HOUR, selected = samples.filter(s => s.t > from && s.t <= now);
+      const rates = selected.map(s => s.hashrate), counts = selected.map(s => s.miners), n = selected.length;
+      const average = n ? rates.reduce((sum, value) => sum + value, 0) / n : null;
+      const variance = n ? rates.reduce((sum, value) => sum + (value - average) ** 2, 0) / n : null;
+      return [duration, { from, to: now, samples: n, expected_samples: duration * HOUR / SAMPLE,
+        average_hashrate: average, minimum_hashrate: n ? Math.min(...rates) : null,
+        maximum_hashrate: n ? Math.max(...rates) : null,
+        variation_percent: n > 1 && average > 0 ? Math.sqrt(variance) / average * 100 : null,
+        average_miners: n ? counts.reduce((sum, value) => sum + value, 0) / n : null,
+        minimum_miners: n ? Math.min(...counts) : null,
+        maximum_miners: n ? Math.max(...counts) : null,
+        first_at: selected[0]?.t ?? null, last_at: selected.at(-1)?.t ?? null }];
+    }));
     // The best hour with at least half of its samples.
     const best = this.sql.exec(`SELECT h, AVG(hashrate) AS hashrate FROM (SELECT (t - 1) / ${HOUR} AS h, hashrate FROM samples)
                                 GROUP BY h HAVING COUNT(*) >= 6 ORDER BY 2 DESC LIMIT 1`).toArray()[0];
@@ -242,9 +262,11 @@ export class Store {
       }),
       fleet,
       // Every 5 minutes over the last 24 hours, then now.
-      recent: [...samples.filter((s) => s.t > now - DAY).map((s) => ({ at: s.t, hashrate: s.hashrate, miners: Math.round(s.miners) })),
+      recent: [...samples.filter((s) => s.t > now - DAY).map((s) => ({ at: s.t, hashrate: s.hashrate, miners: Math.round(s.miners), average_miners: s.miners, samples: 1, interval_ms: SAMPLE })),
         { at: now, hashrate: live.hashrate, miners, live: true }],
       history,
+      current_hour: hours.has(thisHour) ? hourPoint(hours.get(thisHour)) : null,
+      periods,
       record: best?.hashrate > 0 ? { at: best.h * HOUR, hashrate: best.hashrate } : null,
     };
   }

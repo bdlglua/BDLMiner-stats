@@ -40,6 +40,35 @@ describe("stats store", () => {
   let store;
   beforeEach(() => { store = new Store(sqlite()); });
 
+  it('computes public period indicators from five-minute measurements, excluding the live reading', () => {
+    const end=Date.UTC(2026,10,7,12);
+    for(const [minutes,hashrate,miners] of [[15,0,0],[10,2e6,2],[0,4e6,4]])
+      store.sql.exec('INSERT INTO samples VALUES (?,?,?,?)',end-minutes*MIN,hashrate,miners,'{}');
+    const result=store.summary(end),p=result.periods[1];
+    assert.equal(result.hashrate,0);assert.equal(result.recent.at(-1).live,true);
+    assert.equal(p.samples,3);assert.equal(p.expected_samples,12);
+    assert.equal(p.average_hashrate,2e6);assert.equal(p.minimum_hashrate,0);assert.equal(p.maximum_hashrate,4e6);
+    assert.equal(p.average_miners,2);assert.equal(p.maximum_miners,4);
+    assert.ok(Math.abs(p.variation_percent-Math.sqrt(8/3)/2*100)<1e-8);
+    assert.equal(p.first_at,end-15*MIN);assert.equal(p.last_at,end);
+    assert.equal(result.periods[168].expected_samples,2016);
+  });
+
+  it('keeps seven-day averages independent of sparsely populated hourly chart buckets', () => {
+    const end=Date.UTC(2026,10,7,12);
+    for(const [minutes,hashrate,miners] of [[115,1e6,1],[110,3e6,3],[0,8e6,8]])
+      store.sql.exec('INSERT INTO samples VALUES (?,?,?,?)',end-minutes*MIN,hashrate,miners,'{}');
+    const result=store.summary(end);
+    assert.equal(result.history.length,2);
+    assert.equal(result.history[0].hashrate,2e6);assert.equal(result.history[0].samples,2);
+    assert.equal(result.history[0].missing,true);assert.equal(result.history[0].end_at,end-110*MIN);
+    assert.equal(result.periods[168].average_hashrate,4e6);
+    assert.equal(result.periods[1].average_hashrate,8e6);
+    const empty=new Store(sqlite()).summary(end).periods[1];
+    assert.equal(empty.average_hashrate,0,'a measured interval without active reports is a real zero');
+    assert.equal(empty.samples,1);
+  });
+
   it("links recognised groups only to fixed public HTTPS websites", () => {
     assert.deepEqual(Object.keys(POOL_LINKS).sort(), Object.keys(PUBLIC_POOLS).sort());
     for (const [pool, destination] of Object.entries(POOL_LINKS)) {

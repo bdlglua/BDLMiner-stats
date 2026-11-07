@@ -109,6 +109,15 @@ After the GitHub page is published, `REMOTE_VIEWER_REDIRECT=true` sends legacy
 
 ## Endpoints
 
+The public summary also includes `periods` keyed by `1`, `6`, `24` and `168`
+hours. Each contains the mean, minimum, maximum and relative standard deviation
+of the five-minute aggregate hashrates, mean/peak active-miner counts, available
+and expected sample counts, and the first/last measurement times. Period means
+exclude the instantaneous live value and do not treat missing samples as zero.
+Hourly chart points carry their source sample counts, actual ending timestamps
+and a missing-data flag; `current_hour` provides the same information for the
+unfinished hour. These additions retain the existing anonymous-only data model.
+
 | Path | Access | What |
 |---|---|---|
 | `POST /report` | Miners | One report; 204 when stored, 400 when malformed, 429 over the limit |
