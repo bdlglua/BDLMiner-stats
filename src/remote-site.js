@@ -1,4 +1,4 @@
-// The same private viewer as the Worker, packaged as standalone static files.
+// The same remote viewer as the Worker, packaged as standalone static files.
 import { REMOTE_PAGE, REMOTE_APP, REMOTE_STYLE } from './remote-page.js';
 
 export const REMOTE_API_ORIGIN = 'https://bdlminer-stats.bdlminer-bot.workers.dev';
@@ -8,7 +8,7 @@ export function remoteFiles(apiOrigin = REMOTE_API_ORIGIN) {
   if ((url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) ||
       url.origin !== apiOrigin || url.username || url.password)
     throw new Error('Configure a root HTTPS API origin');
-  const policy = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src " + apiOrigin + "; base-uri 'none'; form-action 'none'";
+  const policy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src " + apiOrigin + "; base-uri 'none'; form-action 'none'";
   const meta = '<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><meta name="bdl-remote-api" content="' + apiOrigin + '"><meta http-equiv="Content-Security-Policy" content="' + policy + '">';
   const page = REMOTE_PAGE.replace('<head>', '<head>' + meta)
     .replace('href="/remote.css"', 'href="./remote.css"').replace('src="/remote.js"', 'src="./remote.js"')

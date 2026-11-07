@@ -51,14 +51,24 @@ async function main(){
   release();await page.waitForTimeout(150);assert.doesNotMatch(await page.locator('body').textContent(),/LATE SECRET/);assert.equal(await page.locator('.miner').count(),0);
   await page.unroute('**/api/remote');
   await page.locator('#key').fill(key);await page.locator('#login-form button[type=submit]').click();await page.waitForSelector('.miner');
-  await page.locator('#lang').selectOption('en');assert.match(await page.locator('h1').textContent(),/Keep an eye/);
+  await page.locator('#lang').selectOption('en');assert.match(await page.locator('h1').textContent(),/Your miners, wherever/);
   await page.locator('#manage summary').click();page.once('dialog',dialog=>dialog.accept());await page.locator('#revoke').click();
   await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('Data erased'));
   assert.equal(await page.locator('.miner').count(),0);assert.equal((await fetch(url+'/api/remote',{headers:auth})).status,410);
-  await page.locator('#generate').click();const generated=await page.locator('#key').inputValue();assert.match(generated,/^[a-f0-9]{64}$/);assert.notEqual(generated,key);
   await page.reload();assert.equal(await page.locator('#key').inputValue(),'');assert.equal(await page.locator('.miner').count(),0);
+  // Wallet address mode: the miner reports by its payout address, the owner types the same address.
+  const wallet='bc1qexampleaddress0000000000000000000000';
+  const byAddress=await fetch(url+'/api/remote/report',{method:'POST',headers:{Authorization:'Address '+wallet,'Content-Type':'application/json'},body:JSON.stringify(report('00112233aabbccdd','Gamma salon','bitaxe-gamma-601',1.2e12))});assert.equal(byAddress.status,204);
+  assert.equal((await fetch(url+'/api/remote',{method:'DELETE',headers:{Authorization:'Address '+wallet}})).status,403);
+  await page.locator('#key').fill(' '+wallet.toUpperCase()+'.rig1 ');await page.locator('#login-form button[type=submit]').click();await page.waitForSelector('.miner');
+  assert.equal(await page.locator('.miner').count(),1);assert.match(await page.locator('.miner').textContent(),/Gamma salon/);assert.equal(await page.locator('#manage').isVisible(),false);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('bdl-remote-address')),wallet.toUpperCase());
+  await page.reload();await page.waitForSelector('.miner');assert.equal(await page.locator('#login').isVisible(),false);
+  await page.locator('#logout').click();assert.deepEqual(await page.evaluate(()=>[localStorage.length,sessionStorage.length]),[0,0]);
+  await page.reload();await page.waitForTimeout(300);assert.equal(await page.locator('.miner').count(),0);assert.equal(await page.locator('#login').isVisible(),true);
+  await page.locator('#key').fill('x');await page.locator('#login-form button[type=submit]').click();assert.match(await page.locator('#notice').textContent(),/payout address|adresse de paiement/);
   assert.deepEqual(failures,[]);
-  console.log('PASS private remote browser: static /remote/ on a separate origin, real Worker/SQLite CORS, key isolation, French/English, mobile, safe text, history, no browser key storage, logout races and revocation.');
+  console.log('PASS private remote browser: static /remote/ on a separate origin, real Worker/SQLite CORS, key isolation, French/English, mobile, safe text, history, no browser key storage, logout races, revocation and wallet-address access.');
  }finally{
   if(browser)await browser.close();child.kill('SIGTERM');await new Promise(r=>{child.once('exit',r);setTimeout(r,2000)});await new Promise(r=>site.close(r));fs.rmSync(dir,{recursive:true,force:true});
  }

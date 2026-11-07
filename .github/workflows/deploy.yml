@@ -76,7 +76,7 @@ jobs:
           def call(path, method='GET', body=None, access=key):
               headers = {'User-Agent':'BDLMiner-deployment-check/2.3.0', 'Cache-Control':'no-cache'}
               if access:
-                  headers['Authorization'] = 'Bearer ' + access
+                  headers['Authorization'] = access if access.startswith('Address ') else 'Bearer ' + access
               if body is not None:
                   headers['Content-Type'] = 'application/json'
               req = urllib.request.Request(base + path, None if body is None else json.dumps(body).encode(), headers, method=method)
@@ -154,5 +154,10 @@ jobs:
               assert call('/api/remote', access=other, method='DELETE')[0] == 204
           assert call('/api/remote')[0] == 410
           assert call('/api/remote/report', 'POST', fixture)[0] == 410
+          # Wallet-address spaces: readable without a key, never erasable by address. Read-only check.
+          wallet = 'Address deploycheck' + os.environ['GITHUB_SHA'][:20]
+          status, data = call('/api/remote', access=wallet)
+          assert status == 200 and data['miners'] == [], (status, data)
+          assert call('/api/remote', 'DELETE', access=wallet)[0] == 403
           print('PASS deployed private monitoring: GitHub Pages CORS, authorization, isolated data and permanent revocation; simulated readings erased.')
           PY

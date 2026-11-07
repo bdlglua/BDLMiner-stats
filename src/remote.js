@@ -1,5 +1,7 @@
-// Opt-in personal telemetry. Each 256-bit access key has a separate Durable
-// Object; only its SHA-256 digest is used as an object name. No key is stored.
+// Opt-in personal telemetry, in one Durable Object per access. Access is the
+// miners' payout address (BDLMiner 2.5.4 and later, `Authorization: Address`)
+// or an older 256-bit key (`Authorization: Bearer`). Only a SHA-256 digest
+// names the object: no address or key is stored.
 import { parseReport } from './store.js';
 import { validCoin } from './coins.js';
 import { validPool } from './pools.js';
@@ -26,10 +28,29 @@ export function parseRemote(value) {
     temp_c, accepted, rejected, best, power_percent, pool_connected, pool, firmware_trial };
 }
 
+// The payout address part of a pool login ("bc1q….worker" → "bc1q…"),
+// lower case so that the miner and the page always name the same space.
+export function payoutAddress(value) {
+  if (typeof value !== 'string') return null;
+  const address = value.trim().split('.')[0].toLowerCase();
+  return /^[a-z0-9:_-]{4,100}$/.test(address) ? address : null;
+}
+
+// How a request authenticates: 'key', 'address' or null.
+export function remoteMode(request) {
+  const header = request.headers.get('Authorization') ?? '';
+  if (/^Bearer [a-f0-9]{64}$/.test(header)) return 'key';
+  const address = /^Address (.+)$/.exec(header);
+  return address && payoutAddress(address[1]) ? 'address' : null;
+}
+
 export async function remoteKey(request) {
-  const match = /^Bearer ([a-f0-9]{64})$/.exec(request.headers.get('Authorization') ?? '');
-  if (!match) return null;
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(match[1]));
+  const header = request.headers.get('Authorization') ?? '';
+  const mode = remoteMode(request);
+  if (!mode) return null;
+  // Separate name spaces: an address can never name a key's space.
+  const secret = mode === 'key' ? header.slice(7) : 'address:' + payoutAddress(header.slice(8));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
   return [...new Uint8Array(digest)].map(n => n.toString(16).padStart(2, '0')).join('');
 }
 

@@ -67,15 +67,22 @@ pseudonymous miner IDs are isolated from the anonymous aggregate above.
 
 Each key maps to a separate `RemoteStore` Durable Object by its SHA-256 digest;
 the raw key is not stored. Up to 32 miners share a space, with seven-day history.
-The page keeps the key only in memory, has no third-party resources, and cannot
+The page keeps a key only in memory (an address may be remembered on request), has no third-party resources, and cannot
 control miners. Deletion erases readings and permanently revokes the key; only a
 minimal revocation marker remains. Request addresses are kept in memory only for
 an admission limit of 600 requests/hour/address. The hosting operator can access
 stored readings. Details: [pairing, data and revocation](https://github.com/bdlglua/BDLMinerV2/blob/main/docs/remote-access.md).
 
+From BDLMiner 2.5.4 a miner can instead report under its payout address
+(`Authorization: Address <address>`, the part before any `.worker`, case-folded).
+The owner then opens `/remote/` with that same address: nothing to generate or
+copy. Like a pool's address page, anyone who knows the address can read these
+readings, and an address space cannot be erased through the API; owners who want
+a secret, revocable space keep using a key.
+
 `GET /api/remote`, `GET /api/remote/history?miner=<id>&hours=24` and
-`DELETE /api/remote` require `Authorization: Bearer <personal-key>` even if the
-public page is open. Paired boards use `POST /api/remote/report`. All private
+`DELETE /api/remote` require `Authorization: Bearer <personal-key>` or
+`Authorization: Address <address>` (reads only) even if the public page is open. Paired boards use `POST /api/remote/report`. All private
 responses use `no-store`, an exact GitHub Pages origin allowlist, bounded inputs and
 finite telemetry fields; payouts, workers, raw MACs and private pool hosts are
 excluded. These reports never contribute to `/api/summary`.

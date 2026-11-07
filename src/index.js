@@ -5,7 +5,7 @@
 
 import { parseReport } from "./store.js";
 import { PAGE } from "./page.js";
-import { parseRemote, remoteKey } from './remote.js';
+import { parseRemote, remoteKey, remoteMode } from './remote.js';
 import { REMOTE_PAGE, REMOTE_APP, REMOTE_STYLE } from './remote-page.js';
 
 const MAX_BODY = 512;
@@ -13,7 +13,7 @@ const MAX_BODY = 512;
 const privateHeaders = {
   'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow',
   'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
-  'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+  'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
 };
 const privateJSON = (value, status = 200) => Response.json(value, { status, headers: privateHeaders });
 
@@ -62,7 +62,7 @@ async function privateRoute(request, env, url) {
   const expected = url.pathname.endsWith('/report') ? ['POST'] : url.pathname.endsWith('/history') ? ['GET'] : ['GET', 'DELETE'];
   if (!expected.includes(request.method)) return privateJSON({ error: 'Method not allowed' }, 405);
   const key = await remoteKey(request);
-  if (!key) return privateJSON({ error: 'Private access key required' }, 401);
+  if (!key) return privateJSON({ error: 'Wallet address or private access key required' }, 401);
   if (!await store(env).remoteAllowed(request.headers.get('CF-Connecting-IP') ?? ''))
     return privateJSON({ error: 'Please wait before trying again' }, 429);
   const remote = env.REMOTE.get(env.REMOTE.idFromName(key));
@@ -73,6 +73,9 @@ async function privateRoute(request, env, url) {
     return new Response(null, { status, headers: privateHeaders });
   }
   if (request.method === 'DELETE') {
+    // Anyone may know an address: only a private key can erase its space.
+    // Readings sent by address expire on their own after seven days.
+    if (remoteMode(request) !== 'key') return privateJSON({ error: 'Only a private access key can erase readings' }, 403);
     await remote.revoke();
     return new Response(null, { status: 204, headers: privateHeaders });
   }

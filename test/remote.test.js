@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import vm from 'node:vm';
 import handler from '../src/index.js';
 import { Store } from '../src/store.js';
-import { PrivateStore, parseRemote, remoteKey, REMOTE_KEEP } from '../src/remote.js';
+import { PrivateStore, parseRemote, payoutAddress, remoteKey, REMOTE_KEEP } from '../src/remote.js';
 import { REMOTE_APP, REMOTE_PAGE } from '../src/remote-page.js';
 import { remoteFiles, REMOTE_API_ORIGIN } from '../src/remote-site.js';
 
@@ -110,6 +110,31 @@ describe('private remote monitoring', () => {
     assert.ok(names.every(x => /^[a-f0-9]{64}$/.test(x) && x !== keyA && x !== keyB));
     assert.equal(await remoteKey(request('/api/remote', keyA)), names[0]);
   });
+  it('opens a space by payout address, separate from keys, without letting it erase', async () => {
+    const env = environment(), address = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+    const by = (value, path = '/api/remote', method = 'GET', body) => request(path, undefined, method, body, { Authorization: 'Address ' + value });
+    assert.equal((await handler.fetch(by(address + '.m5stick', '/api/remote/report', 'POST', report()), env)).status, 204);
+    // The worker name and the case do not matter: the page reads the miner's space.
+    for (const view of [address, address.toUpperCase() + '.other', '  ' + address + '  ']) {
+      const mine = await (await handler.fetch(by(view), env)).json();
+      assert.equal(mine.miners.length, 1);
+    }
+    // Another address, or a key, is another space.
+    assert.equal((await (await handler.fetch(by('bc1qotheraddress000000000000000000000000'), env)).json()).miners.length, 0);
+    assert.equal((await (await handler.fetch(request('/api/remote', keyA), env)).json()).miners.length, 0);
+    // No address or key names a space in clear.
+    const names = [...env.spaces.keys()];
+    assert.ok(names.every(x => /^[a-f0-9]{64}$/.test(x) && !x.includes('bc1q')));
+    // Anyone may know an address: erasing needs a private key.
+    assert.equal((await handler.fetch(by(address, '/api/remote', 'DELETE'), env)).status, 403);
+    assert.equal((await (await handler.fetch(by(address), env)).json()).miners.length, 1);
+    // Malformed addresses are refused like a missing access.
+    for (const bad of ['', 'ab', 'x'.repeat(101), 'bc1q<script>', 'bc1 q'])
+      assert.equal((await handler.fetch(by(bad), env)).status, 401);
+    assert.equal(payoutAddress(' BC1QABC.worker '), 'bc1qabc');
+    assert.equal(payoutAddress('bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a'), 'bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a');
+    assert.equal(payoutAddress('a.b'), null);
+  });
   it('requires a bearer key for every personal route and refuses other methods', async () => {
     const env = environment();
     for (const [path, method, body] of [['/api/remote','GET'],['/api/remote','DELETE'],['/api/remote/history?miner=0123456789abcdef','GET'],['/api/remote/report','POST',report()]]) {
@@ -171,6 +196,9 @@ describe('private remote monitoring', () => {
       assert.equal(response.headers.get('Cache-Control'),'no-store');assert.equal(response.headers.get('Access-Control-Allow-Origin'),null);
     }
     assert.doesNotMatch(REMOTE_PAGE,/<script[^>]*>[^<]+<\/script>/);
-    assert.doesNotMatch(REMOTE_APP,/localStorage|sessionStorage/);
+    assert.doesNotMatch(REMOTE_APP,/sessionStorage/);
+    // Only the payout address may be remembered; a private key never is.
+    assert.deepEqual([...REMOTE_APP.matchAll(/localStorage\.(\w+)\(/g)].map(m=>m[1]).sort(),['getItem','removeItem','setItem']);
+    assert.match(REMOTE_APP,/if\(KEY\.test\(value\)\)\{stored\(null\)/);
   });
 });
