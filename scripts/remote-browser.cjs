@@ -7,7 +7,7 @@ async function main(){
  const port=await freePort(),inspect=await freePort(),dir=fs.mkdtempSync(path.join(os.tmpdir(),'bdl-private-test-')),url='http://127.0.0.1:'+port;
  const {remoteFiles}=await import('../src/remote-site.js'),files=remoteFiles(url);
  const site=http.createServer((request,response)=>{
-  const name=request.url==='/remote/'?'index.html':request.url.startsWith('/remote/')?request.url.slice(8):'';
+  const target=request.url.split('?')[0],name=target==='/remote/'?'index.html':target.startsWith('/remote/')?target.slice(8):'';
   if(!Object.hasOwn(files,name)){response.writeHead(404);response.end();return}
   response.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html':name.endsWith('.css')?'text/css':'text/javascript'});response.end(files[name]);
  });
