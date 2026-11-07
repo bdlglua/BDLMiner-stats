@@ -90,8 +90,15 @@ export class PrivateStore {
     if (!/^[a-f0-9]{16}$/.test(miner) || ![1, 6, 24, 168].includes(hours)) return null;
     this.prune(now);
     const bucket = Math.max(REMOTE_INTERVAL * 1000, hours * 3600000 / 480);
-    const points = this.sql.exec('SELECT CAST(t / ? AS INTEGER) * ? AS t, AVG(rate) AS rate, MAX(temp) AS temp, MIN(boot) AS boot, COUNT(DISTINCT boot) AS boots FROM readings WHERE miner=? AND t>=? GROUP BY CAST(t / ? AS INTEGER) ORDER BY t', bucket, bucket, miner, now - hours * 3600000, bucket).toArray().map(p => ({ t: p.t, rate: p.rate, temp: p.temp, boot: p.boot, mixed_boots: p.boots > 1 }));
-    return { points, interval_ms: bucket };
+    const start = now - hours * 3600000;
+    const points = this.sql.exec('SELECT CAST(t / ? AS INTEGER) * ? AS t, AVG(rate) AS rate, MIN(rate) AS min_rate, MAX(rate) AS max_rate, AVG(temp) AS temp, MAX(temp) AS max_temp, COUNT(*) AS samples, MIN(boot) AS boot, COUNT(DISTINCT boot) AS boots FROM readings WHERE miner=? AND t>=? AND t<=? GROUP BY CAST(t / ? AS INTEGER) ORDER BY t', bucket, bucket, miner, start, now, bucket).toArray().map(p => ({ ...p, mixed_boots: p.boots > 1 }));
+    // Compute statistics from every report, before chart downsampling. An average
+    // of bucket averages would give sparsely populated buckets too much weight.
+    const summary = this.sql.exec('SELECT COUNT(*) AS reports, AVG(rate) AS average, MIN(rate) AS minimum, MAX(rate) AS maximum, AVG(rate * rate) AS mean_square, AVG(temp) AS temperature_average, MAX(temp) AS temperature_maximum, MIN(t) AS first_at, MAX(t) AS last_at FROM readings WHERE miner=? AND t>=? AND t<=?', miner, start, now).toArray()[0];
+    const restarts = this.sql.exec('SELECT COUNT(*) AS n FROM (SELECT boot, LAG(boot) OVER (ORDER BY t) AS previous FROM readings WHERE miner=? AND t>=? AND t<=?) WHERE previous IS NOT NULL AND boot != previous', miner, start, now).toArray()[0].n;
+    summary.variation_percent = summary.reports > 1 && summary.average > 0 ? Math.sqrt(Math.max(0, summary.mean_square - summary.average ** 2)) / summary.average * 100 : null;
+    delete summary.mean_square;
+    return { points, interval_ms: bucket, window_start: start, window_end: now, summary: { ...summary, restarts } };
   }
   revoke() {
     this.sql.exec('DELETE FROM miners');

@@ -42,11 +42,11 @@ async function main(){
   assert.ok(urls.some(value=>value.startsWith(url+'/api/remote')),'static viewer must query the other origin');
   assert.ok(urls.every(value=>value.startsWith(url+'/')||value.startsWith(siteURL+'/')));assert.ok(urls.every(value=>!value.includes(key)&&!value.includes(other)));
   const refused=await fetch(url+'/api/remote',{headers:{...auth,Origin:'https://untrusted.example'}});assert.equal(refused.status,403);
-  // Inspect rendered pixels: an API reading must remain visible even without a segment.
-  let chartPoints=[];
-  await page.route('**/api/remote/history?**',route=>route.fulfill({json:{points:chartPoints,interval_ms:300000}}));
-  async function chart(points){
-   chartPoints=points;
+  // Inspect real canvas output as well as the statistics, controls and downloads.
+  let chartPoints=[],chartSummary=null;
+  await page.route('**/api/remote/history?**',route=>route.fulfill({json:{points:chartPoints,summary:chartSummary,interval_ms:300000,window_start:Date.now()-3600000,window_end:Date.now()}}));
+  async function chart(points,summary=null){
+   chartPoints=points;chartSummary=summary;
    const response=page.waitForResponse(r=>r.url().includes('/api/remote/history?'));
    await page.locator('#hours').selectOption('1');await(await response).finished();
    await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
@@ -56,7 +56,7 @@ async function main(){
     return {pixels,columns:columns.size};
    });
   }
-  const now=Date.now(),point=(minutes,extra={})=>({t:now-minutes*60000,rate:1e12,boot:'aabbccdd',mixed_boots:false,...extra});
+  const now=Date.now(),point=(minutes,extra={})=>({t:now-minutes*60000,rate:1e12,temp:50,samples:1,boot:'aabbccdd',mixed_boots:false,...extra});
   for(const rate of [1e12,0]){
    const single=await chart([point(30,{rate})]);assert.ok(single.pixels>10,'one reading must draw a visible point, including a stopped miner');assert.ok(single.columns<10,'one reading must not invent a line');
    assert.match(await page.locator('#history-note').textContent(),/Un seul relevé/);
@@ -65,7 +65,27 @@ async function main(){
    const isolated=await chart(points);assert.ok(isolated.pixels>20,'readings on either side of a gap or restart must remain visible');assert.ok(isolated.columns<20,'gaps and restarts must not be connected');
   }
   assert.ok((await chart([point(35),point(30)])).columns>20,'consecutive readings must remain connected');
-  const empty=await chart([]);assert.equal(empty.pixels,0);assert.match(await page.locator('#history-note').textContent(),/Pas encore/);
+  const empty=await chart([],{reports:0,restarts:0});assert.equal(empty.pixels,0);assert.match(await page.locator('#history-note').textContent(),/Pas encore/);
+  assert.equal(await page.locator('#export-history').isDisabled(),true);assert.equal(await page.locator('#stat-average').textContent(),'—');
+  const readings=[.9,1,1.1,1.1,1,.9].map((rate,i)=>point(25-i*5,{rate:rate*1e12,temp:[48,49,50,51,50,49][i]}));
+  await chart(readings,{reports:6,average:1e12,minimum:.9e12,maximum:1.1e12,temperature_average:49.5,temperature_maximum:51,variation_percent:8.16496580927726,restarts:0,first_at:readings[0].t,last_at:readings[5].t});
+  assert.equal(await page.locator('#stat-average').textContent(),'1 TH/s');assert.equal(await page.locator('#stat-maximum').textContent(),'1,1 TH/s');
+  assert.match(await page.locator('#stat-minimum').textContent(),/900 GH\/s/);assert.match(await page.locator('#stat-variation').textContent(),/8,2 %/);
+  assert.equal(await page.locator('#stat-temperature').textContent(),'49,5 °C');assert.equal(await page.locator('#stat-reports').textContent(),'6');
+  await page.locator('#chart').focus();await page.keyboard.press('End');
+  assert.equal(await page.locator('#chart-tooltip').isVisible(),true);assert.match(await page.locator('#chart-tooltip strong').textContent(),/900 GH\/s/);
+  await page.locator('[data-metric=temp]').click();assert.equal(await page.locator('[data-metric=temp]').getAttribute('aria-pressed'),'true');
+  await page.locator('#chart').focus();await page.keyboard.press('Home');assert.equal(await page.locator('#chart-tooltip strong').textContent(),'48 °C');
+  await page.locator('[data-metric=rate]').click();
+  const box=await page.locator('#chart').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+80);assert.equal(await page.locator('#chart-tooltip').isVisible(),true);
+  const download=page.waitForEvent('download');await page.locator('#export-history').click();const csv=fs.readFileSync(await(await download).path(),'utf8');
+  assert.match(csv,/hashrate_average_hs,hashrate_minimum_hs/);assert.equal(csv.trim().split('\r\n').length,7);assert.ok(!csv.includes(key)&&!csv.includes(other));
+  await page.locator('.readings summary').click();assert.equal(await page.locator('#history-rows tr').count(),6);
+  if(process.env.BDL_SCREENSHOT_DIR){
+   fs.mkdirSync(process.env.BDL_SCREENSHOT_DIR,{recursive:true});await page.locator('#history').screenshot({path:path.join(process.env.BDL_SCREENSHOT_DIR,'statistics-desktop.png')});
+   await page.setViewportSize({width:375,height:812});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+   await page.locator('#history').screenshot({path:path.join(process.env.BDL_SCREENSHOT_DIR,'statistics-mobile.png')});await page.setViewportSize({width:1440,height:1000});
+  }
   await page.unroute('**/api/remote/history?**');
   await page.locator('#hours').selectOption('24');
   await page.setViewportSize({width:375,height:812});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
@@ -78,6 +98,7 @@ async function main(){
   await page.unroute('**/api/remote');
   await page.locator('#key').fill(key);await page.locator('#login-form button[type=submit]').click();await page.waitForSelector('.miner');
   await page.locator('#lang').selectOption('en');assert.match(await page.locator('h1').textContent(),/Your miners, wherever/);
+  assert.match(await page.locator('#stat-minimum').textContent(),/^Minimum/);assert.match(await page.locator('#stat-restarts').textContent(),/^Observed restarts/);
   await page.locator('#manage summary').click();page.once('dialog',dialog=>dialog.accept());await page.locator('#revoke').click();
   await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('Data erased'));
   assert.equal(await page.locator('.miner').count(),0);assert.equal((await fetch(url+'/api/remote',{headers:auth})).status,410);
@@ -94,7 +115,7 @@ async function main(){
   await page.reload();await page.waitForTimeout(300);assert.equal(await page.locator('.miner').count(),0);assert.equal(await page.locator('#login').isVisible(),true);
   await page.locator('#key').fill('x');await page.locator('#login-form button[type=submit]').click();assert.match(await page.locator('#notice').textContent(),/payout address|adresse de paiement/);
   assert.deepEqual(failures,[]);
-  console.log('PASS private remote browser: static /remote/ on a separate origin, real Worker/SQLite CORS, key isolation, French/English, mobile, safe text, visible single/zero readings, honest history gaps and restarts, no browser key storage, logout races, revocation and wallet-address access.');
+  console.log('PASS remote statistics: real Worker/SQLite CORS, period indicators, area and temperature charts, keyboard/pointer inspection, CSV, recent readings, zero/empty history, gaps/restarts, French/English, mobile, key isolation, logout races, revocation and wallet-address access.');
  }finally{
   if(browser)await browser.close();child.kill('SIGTERM');await new Promise(r=>{child.once('exit',r);setTimeout(r,2000)});await new Promise(r=>site.close(r));fs.rmSync(dir,{recursive:true,force:true});
  }

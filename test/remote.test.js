@@ -180,6 +180,28 @@ describe('private remote monitoring', () => {
     assert.equal(s.add(report('ffffffffffffffff'),t),409);
     assert.equal(s.snapshot(t).miners.length,32);
   });
+  it('calculates period statistics from raw reports before downsampling, isolated by miner', () => {
+    const s=new PrivateStore(sqlite()),bucket=1260000,t=Math.floor(1800000000000/bucket)*bucket;
+    for(const [offset,rate,temp,boot] of [[60000,1e6,40,'aa'],[120000,3e6,null,'aa'],[bucket,8e6,60,'bb']])
+      assert.equal(s.add({...report(),hashrate:rate,temp_c:temp,boot_id:boot},t+offset),204);
+    assert.equal(s.add({...report('fedcba9876543210'),hashrate:99e6},t+bucket),204);
+    assert.equal(s.add({...report(),hashrate:99e6},t+3600000),204);
+    const data=s.history(report().id,168,t+1800000);
+    assert.equal(data.points.length,2);assert.equal(data.points[0].samples,2);
+    assert.equal(data.points[0].rate,2e6);assert.equal(data.points[0].min_rate,1e6);assert.equal(data.points[0].max_rate,3e6);
+    assert.deepEqual({...data.summary,variation_percent:undefined},{reports:3,average:4e6,minimum:1e6,maximum:8e6,temperature_average:50,temperature_maximum:60,first_at:t+60000,last_at:t+bucket,restarts:1,variation_percent:undefined});
+    assert.ok(Math.abs(data.summary.variation_percent-Math.sqrt(26/3)/4*100)<1e-8);
+    assert.equal(data.window_end,t+1800000);assert.equal(data.window_start,data.window_end-REMOTE_KEEP);
+  });
+  it('distinguishes absent history and temperature from a measured zero hashrate', () => {
+    const s=new PrivateStore(sqlite()),t=1800000000000;
+    const empty=s.history(report().id,1,t);assert.equal(empty.summary.reports,0);assert.equal(empty.summary.average,null);assert.equal(empty.summary.variation_percent,null);
+    s.add({...report(),hashrate:0,temp_c:null},t);
+    const zero=s.history(report().id,1,t).summary;
+    assert.equal(zero.average,0);assert.equal(zero.minimum,0);assert.equal(zero.maximum,0);
+    assert.equal(zero.temperature_average,null);assert.equal(zero.restarts,0);assert.equal(zero.variation_percent,null);
+    assert.equal(s.history(report().id,1,t+3600001).summary.reports,0);
+  });
   it('revokes an access key durably and erases its readings without affecting another key', async () => {
     const env=environment();
     for(const key of [keyA,keyB])assert.equal((await handler.fetch(request('/api/remote/report',key,'POST',report()),env)).status,204);

@@ -87,6 +87,16 @@ responses use `no-store`, an exact GitHub Pages origin allowlist, bounded inputs
 finite telemetry fields; payouts, workers, raw MACs and private pool hosts are
 excluded. These reports never contribute to `/api/summary`.
 
+The viewer includes period statistics, interactive hashrate and temperature area
+charts, recent readings and CSV export. The chart fits the available readings
+within the selected 1-hour, 6-hour, 24-hour or 7-day window; missing reports and
+restarts remain visible as gaps. The history API returns a `summary` calculated
+from all received reports before chart downsampling: average/minimum/maximum
+hashrate, relative standard deviation, average/maximum temperature, report count,
+first/last report times and observed boot-ID changes. These are statistics of
+received readings, not inferred mining uptime. No additional firmware reports,
+credentials or storage migration are needed; existing seven-day readings work.
+
 The private interface is exported from the same source as the legacy Worker page:
 `node scripts/build-remote-site.js <site-directory>/remote` writes three static
 files plus their source/digest manifest. The root website's workflow builds and
