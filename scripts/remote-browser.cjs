@@ -36,12 +36,38 @@ async function main(){
   assert.equal(await page.locator('.miner').count(),2);assert.equal(await page.locator('.miner img').count(),0);assert.equal(await page.evaluate(()=>window.bad),undefined);
   assert.match(await page.locator('#total').textContent(),/1 T/);assert.match(await page.locator('.miner').first().textContent(),/Température/);
   assert.equal(await page.locator('.miner button,.miner input,.miner select').count(),0);
-  await page.waitForFunction(()=>document.querySelector('#history-note').textContent.includes('interruptions'));
+  await page.waitForFunction(()=>document.querySelector('#history-note').textContent.includes('Un seul relevé'));
   assert.equal(await page.locator('#login').isVisible(),false);assert.equal(await page.locator('#key').inputValue(),'');
   assert.deepEqual(await page.evaluate(()=>[localStorage.length,sessionStorage.length]),[0,0]);
   assert.ok(urls.some(value=>value.startsWith(url+'/api/remote')),'static viewer must query the other origin');
   assert.ok(urls.every(value=>value.startsWith(url+'/')||value.startsWith(siteURL+'/')));assert.ok(urls.every(value=>!value.includes(key)&&!value.includes(other)));
   const refused=await fetch(url+'/api/remote',{headers:{...auth,Origin:'https://untrusted.example'}});assert.equal(refused.status,403);
+  // Inspect rendered pixels: an API reading must remain visible even without a segment.
+  let chartPoints=[];
+  await page.route('**/api/remote/history?**',route=>route.fulfill({json:{points:chartPoints,interval_ms:300000}}));
+  async function chart(points){
+   chartPoints=points;
+   const response=page.waitForResponse(r=>r.url().includes('/api/remote/history?'));
+   await page.locator('#hours').selectOption('1');await(await response).finished();
+   await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+   return page.locator('#chart').evaluate(canvas=>{
+    const {data}=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height),columns=new Set();let pixels=0;
+    for(let i=0;i<data.length;i+=4)if(data[i]>180&&data[i+1]>60&&data[i+1]<190&&data[i+2]<70&&data[i+3]>100){pixels++;columns.add(i/4%canvas.width)}
+    return {pixels,columns:columns.size};
+   });
+  }
+  const now=Date.now(),point=(minutes,extra={})=>({t:now-minutes*60000,rate:1e12,boot:'aabbccdd',mixed_boots:false,...extra});
+  for(const rate of [1e12,0]){
+   const single=await chart([point(30,{rate})]);assert.ok(single.pixels>10,'one reading must draw a visible point, including a stopped miner');assert.ok(single.columns<10,'one reading must not invent a line');
+   assert.match(await page.locator('#history-note').textContent(),/Un seul relevé/);
+  }
+  for(const points of [[point(45),point(15)],[point(35),point(30,{boot:'ddeeff00'})],[point(35,{mixed_boots:true}),point(30)]]){
+   const isolated=await chart(points);assert.ok(isolated.pixels>20,'readings on either side of a gap or restart must remain visible');assert.ok(isolated.columns<20,'gaps and restarts must not be connected');
+  }
+  assert.ok((await chart([point(35),point(30)])).columns>20,'consecutive readings must remain connected');
+  const empty=await chart([]);assert.equal(empty.pixels,0);assert.match(await page.locator('#history-note').textContent(),/Pas encore/);
+  await page.unroute('**/api/remote/history?**');
+  await page.locator('#hours').selectOption('24');
   await page.setViewportSize({width:375,height:812});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   if(process.env.BDL_SCREENSHOT_DIR){fs.mkdirSync(process.env.BDL_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.BDL_SCREENSHOT_DIR,'private-remote-mobile.png'),fullPage:true})}
   let release,started;const pending=new Promise(r=>started=r);
@@ -68,7 +94,7 @@ async function main(){
   await page.reload();await page.waitForTimeout(300);assert.equal(await page.locator('.miner').count(),0);assert.equal(await page.locator('#login').isVisible(),true);
   await page.locator('#key').fill('x');await page.locator('#login-form button[type=submit]').click();assert.match(await page.locator('#notice').textContent(),/payout address|adresse de paiement/);
   assert.deepEqual(failures,[]);
-  console.log('PASS private remote browser: static /remote/ on a separate origin, real Worker/SQLite CORS, key isolation, French/English, mobile, safe text, history, no browser key storage, logout races, revocation and wallet-address access.');
+  console.log('PASS private remote browser: static /remote/ on a separate origin, real Worker/SQLite CORS, key isolation, French/English, mobile, safe text, visible single/zero readings, honest history gaps and restarts, no browser key storage, logout races, revocation and wallet-address access.');
  }finally{
   if(browser)await browser.close();child.kill('SIGTERM');await new Promise(r=>{child.once('exit',r);setTimeout(r,2000)});await new Promise(r=>site.close(r));fs.rmSync(dir,{recursive:true,force:true});
  }
