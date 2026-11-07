@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 import vm from 'node:vm';
@@ -65,7 +66,10 @@ describe('private remote monitoring', () => {
   });
   it('packages a standalone viewer with relative assets and an explicit API policy', () => {
     const files=remoteFiles();assert.deepEqual(Object.keys(files).sort(),['index.html','remote.css','remote.js']);
-    assert.match(files['index.html'],/href="\.\/remote.css"/);assert.match(files['index.html'],/src="\.\/remote.js"/);
+    // Each asset link carries its content digest, so a cached old script or style is never mixed with a new page.
+    const hash=text=>createHash('sha256').update(text).digest('hex').slice(0,12);
+    assert.ok(files['index.html'].includes('href="./remote.css?v='+hash(files['remote.css'])+'"'));
+    assert.ok(files['index.html'].includes('src="./remote.js?v='+hash(files['remote.js'])+'"'));
     assert.ok(files['index.html'].includes('connect-src '+REMOTE_API_ORIGIN));
     assert.ok(files['index.html'].includes('name="referrer" content="no-referrer"'));
     assert.ok(files['index.html'].includes('name="bdl-remote-api" content="'+REMOTE_API_ORIGIN+'"'));
