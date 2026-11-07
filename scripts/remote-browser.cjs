@@ -102,6 +102,7 @@ async function main(){
   release();await page.waitForTimeout(150);assert.doesNotMatch(await page.locator('body').textContent(),/LATE SECRET/);assert.equal(await page.locator('.miner').count(),0);
   await page.unroute('**/api/remote');
   await page.locator('#key').fill(key);await page.locator('#login-form button[type=submit]').click();await page.waitForSelector('.miner');
+  await page.waitForFunction(()=>Number(document.querySelector('#stat-reports').textContent)>0);
   await page.locator('#lang').selectOption('en');assert.match(await page.locator('h1').textContent(),/Your miners, wherever/);
   assert.match(await page.locator('#stat-minimum').textContent(),/^Minimum/);assert.match(await page.locator('#stat-restarts').textContent(),/^Observed restarts/);
   await page.locator('#manage summary').click();page.once('dialog',dialog=>dialog.accept());await page.locator('#revoke').click();
