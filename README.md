@@ -60,7 +60,8 @@ previous report then ends, so that it is not counted twice. It is never stored.
 
 ## Private remote monitoring
 
-The [GitHub Pages `/remote/` viewer](https://bdlglua.github.io/remote/) lets owners monitor their own paired miners without
+The [`/remote/` viewer](https://miner.bdl-pool.com/remote/) (also at
+[bdlglua.github.io/remote/](https://bdlglua.github.io/remote/)) lets owners monitor their own paired miners without
 a local hub. From BDLMiner 2.3.0, an explicit opt-in sends selected readings every
 five minutes using a browser-generated 256-bit key. Personal names and keyed
 pseudonymous miner IDs are isolated from the anonymous aggregate above.
@@ -83,7 +84,7 @@ a secret, revocable space keep using a key.
 `GET /api/remote`, `GET /api/remote/history?miner=<id>&hours=24` and
 `DELETE /api/remote` require `Authorization: Bearer <personal-key>` or
 `Authorization: Address <address>` (reads only) even if the public page is open. Paired boards use `POST /api/remote/report`. All private
-responses use `no-store`, an exact GitHub Pages origin allowlist, bounded inputs and
+responses use `no-store`, an exact viewer origin allowlist (`REMOTE_VIEWER_ORIGIN`), bounded inputs and
 finite telemetry fields; payouts, workers, raw MACs and private pool hosts are
 excluded. These reports never contribute to `/api/summary`.
 
@@ -99,13 +100,14 @@ credentials or storage migration are needed; existing seven-day readings work.
 
 The private interface is exported from the same source as the legacy Worker page:
 `node scripts/build-remote-site.js <site-directory>/remote` writes three static
-files plus their source/digest manifest. The root website's workflow builds and
-publishes them on GitHub Pages. The interface sends bearer-authenticated requests
+files plus their source/digest manifest. The website workflows build and publish
+them on GitHub Pages, at https://miner.bdl-pool.com/remote/ (BDLMinerV2) and
+https://bdlglua.github.io/remote/ (root site). The interface sends bearer-authenticated requests
 to this Worker with cookies omitted. Browser origins outside the configured
-viewer origin and the service's own origin are refused; preflight does not grant
+viewer origins (space-separated `REMOTE_VIEWER_ORIGIN`) and the service's own origin are refused; preflight does not grant
 access without a key. Firmware reports continue using their existing endpoint.
 After the GitHub page is published, `REMOTE_VIEWER_REDIRECT=true` sends legacy
-`/remote` links to the new address without forwarding any query string.
+`/remote` links to the first viewer origin's `/remote/` without forwarding any query string.
 
 ## Endpoints
 

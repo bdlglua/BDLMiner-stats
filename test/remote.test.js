@@ -36,14 +36,18 @@ function request(path, key, method = 'GET', body, extra = {}) {
 
 describe('private remote monitoring', () => {
   it('allows authenticated cross-origin reads only from the configured viewer', async () => {
-    const env=environment(), origin='https://bdlglua.github.io';
+    for(const origin of ['https://miner.bdl-pool.com','https://bdlglua.github.io']){
+    const env=environment();
     const missing=await handler.fetch(request('/api/remote',undefined,'GET',undefined,{Origin:origin}),env);
     assert.equal(missing.status,401);assert.equal(missing.headers.get('Access-Control-Allow-Origin'),origin);
     assert.equal(missing.headers.get('Access-Control-Allow-Credentials'),null);
     assert.equal(missing.headers.get('Cache-Control'),'no-store');assert.equal(missing.headers.get('Vary'),'Origin');
     const good=await handler.fetch(request('/api/remote',keyA,'GET',undefined,{Origin:origin}),env);
     assert.equal(good.status,200);assert.equal(good.headers.get('Access-Control-Allow-Origin'),origin);
-    for(const bad of ['https://attacker.test','https://bdlglua.github.io.attacker.test','http://bdlglua.github.io','null']){
+    }
+    const env=environment();
+    for(const bad of ['https://attacker.test','https://bdlglua.github.io.attacker.test','http://bdlglua.github.io',
+      'https://miner.bdl-pool.com.attacker.test','http://miner.bdl-pool.com','https://bdl-pool.com','null']){
       const response=await handler.fetch(request('/api/remote',keyA,'GET',undefined,{Origin:bad}),env);
       assert.equal(response.status,403);assert.equal(response.headers.get('Access-Control-Allow-Origin'),null);
     }
@@ -81,7 +85,7 @@ describe('private remote monitoring', () => {
     const env=environment();env.REMOTE_VIEWER_REDIRECT='true';
     for(const path of ['/remote','/remote/','/remote?key='+keyA]){
       const response=await handler.fetch(request(path),env);
-      assert.equal(response.status,302);assert.equal(response.headers.get('Location'),'https://bdlglua.github.io/remote/');
+      assert.equal(response.status,302);assert.equal(response.headers.get('Location'),'https://miner.bdl-pool.com/remote/');
       assert.equal(response.headers.get('Cache-Control'),'no-store');
     }
     assert.equal((await handler.fetch(request('/api/remote'),env)).status,401);

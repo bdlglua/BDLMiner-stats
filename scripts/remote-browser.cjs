@@ -18,7 +18,7 @@ async function main(){
   const ready=Date.now()+45000;let active=false;
   while(Date.now()<ready){try{active=(await fetch(url+'/api/remote')).status===401;if(active)break}catch{}await new Promise(r=>setTimeout(r,200))}
   assert.ok(active,'Local Worker did not start: '+logs.slice(-3000));
-  const legacy=await fetch(url+'/remote',{redirect:'manual'});assert.equal(legacy.status,302);assert.equal(legacy.headers.get('Location'),'https://bdlglua.github.io/remote/');
+  const legacy=await fetch(url+'/remote',{redirect:'manual'});assert.equal(legacy.status,302);assert.equal(legacy.headers.get('Location'),siteURL+'/remote/');
   const publicSummary=await(await fetch(url+'/api/summary')).json();
   assert.equal(publicSummary.periods[1].expected_samples,12);assert.equal(publicSummary.periods[168].expected_samples,2016);
   assert.equal(publicSummary.periods[24].average_hashrate,0,'a public measurement without active reports is a real zero');

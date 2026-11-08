@@ -17,10 +17,13 @@ const privateHeaders = {
 };
 const privateJSON = (value, status = 200) => Response.json(value, { status, headers: privateHeaders });
 
+// Space-separated viewer origins; the first is the address legacy links open.
+const DEFAULT_VIEWERS = 'https://miner.bdl-pool.com https://bdlglua.github.io';
+const viewerOrigins = env => (env.REMOTE_VIEWER_ORIGIN || DEFAULT_VIEWERS).split(/\s+/).filter(Boolean);
+
 function remoteCors(request, env, url) {
   const origin = request.headers.get('Origin');
-  const viewer = env.REMOTE_VIEWER_ORIGIN || 'https://bdlglua.github.io';
-  if (origin && origin !== viewer && origin !== url.origin)
+  if (origin && !viewerOrigins(env).includes(origin) && origin !== url.origin)
     return { error: privateJSON({ error: 'Origin not allowed' }, 403) };
   if (origin && url.pathname === '/api/remote/report')
     return { error: privateJSON({ error: 'Browser reports are not allowed' }, 403) };
@@ -136,7 +139,7 @@ export default {
     }
     if ((url.pathname === '/remote' || url.pathname === '/remote/') && env.REMOTE_VIEWER_REDIRECT === 'true') {
       if (request.method !== 'GET') return privateJSON({ error: 'GET only' }, 405);
-      return new Response(null, { status: 302, headers: { ...privateHeaders, Location: 'https://bdlglua.github.io/remote/' } });
+      return new Response(null, { status: 302, headers: { ...privateHeaders, Location: viewerOrigins(env)[0] + '/remote/' } });
     }
     const remoteAsset = { '/remote': [REMOTE_PAGE, 'text/html; charset=utf-8'],
       '/remote.js': [REMOTE_APP, 'text/javascript; charset=utf-8'], '/remote.css': [REMOTE_STYLE, 'text/css; charset=utf-8'] }[url.pathname];

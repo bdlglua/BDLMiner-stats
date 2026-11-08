@@ -5,7 +5,8 @@ workers_dev = true
 logpush = false
 
 [vars]
-REMOTE_VIEWER_ORIGIN = "https://bdlglua.github.io"
+# Space-separated; the first is the address legacy links open.
+REMOTE_VIEWER_ORIGIN = "https://miner.bdl-pool.com https://bdlglua.github.io"
 # Legacy bookmarks and existing firmware links open the GitHub Pages viewer.
 REMOTE_VIEWER_REDIRECT = "true"
 
