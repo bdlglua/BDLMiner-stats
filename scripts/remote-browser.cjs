@@ -12,7 +12,9 @@ async function main(){
   response.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html':name.endsWith('.css')?'text/css':'text/javascript'});response.end(files[name]);
  });
  await new Promise(r=>site.listen(0,'127.0.0.1',r));const siteURL='http://127.0.0.1:'+site.address().port;
- const child=spawn(path.resolve('node_modules/.bin/wrangler'),['dev','--local','--ip','127.0.0.1','--port',String(port),'--inspector-port',String(inspect),'--persist-to',dir,'--var','REMOTE_VIEWER_ORIGIN:'+siteURL,'--var','REMOTE_VIEWER_REDIRECT:true'],{env:{...process.env,WRANGLER_SEND_METRICS:'false'},stdio:['ignore','pipe','pipe']});let logs='';for(const stream of [child.stdout,child.stderr])stream.on('data',chunk=>logs+=chunk);
+ const native=process.env.BDL_SELF_HOSTED==='1';let collector,child,logs='';
+ if(native){const {createCollector}=await import('../server/http.js');collector=createCollector({directory:dir,publicOrigin:url,viewerOrigins:siteURL});await new Promise(r=>collector.server.listen(port,'127.0.0.1',r))}
+ else{child=spawn(path.resolve('node_modules/.bin/wrangler'),['dev','--local','--ip','127.0.0.1','--port',String(port),'--inspector-port',String(inspect),'--persist-to',dir,'--var','REMOTE_VIEWER_ORIGIN:'+siteURL,'--var','REMOTE_VIEWER_REDIRECT:true'],{env:{...process.env,WRANGLER_SEND_METRICS:'false'},stdio:['ignore','pipe','pipe']});for(const stream of [child.stdout,child.stderr])stream.on('data',chunk=>logs+=chunk)}
  let browser;
  try{
   const ready=Date.now()+45000;let active=false;
@@ -124,9 +126,9 @@ async function main(){
   await page.reload();await page.waitForTimeout(300);assert.equal(await page.locator('.miner').count(),0);assert.equal(await page.locator('#login').isVisible(),true);
   await page.locator('#key').fill('x');await page.locator('#login-form button[type=submit]').click();assert.match(await page.locator('#notice').textContent(),/payout address|adresse de paiement/);
   assert.deepEqual(failures,[]);
-  console.log('PASS remote statistics: real Worker/SQLite CORS, period indicators, area and temperature charts, keyboard/pointer inspection, CSV, recent readings, zero/empty history, gaps/restarts, French/English, mobile, key isolation, logout races, revocation and wallet-address access.');
+  console.log('PASS remote statistics ('+(native?'native server':'Worker')+'): SQLite CORS, period indicators, area and temperature charts, keyboard/pointer inspection, CSV, recent readings, zero/empty history, gaps/restarts, French/English, mobile, key isolation, logout races, revocation and wallet-address access.');
  }finally{
-  if(browser)await browser.close();child.kill('SIGTERM');await new Promise(r=>{child.once('exit',r);setTimeout(r,2000)});await new Promise(r=>site.close(r));fs.rmSync(dir,{recursive:true,force:true});
+  if(browser)await browser.close();if(collector)await collector.close();if(child){child.kill('SIGTERM');await new Promise(r=>{child.once('exit',r);setTimeout(r,2000)})}await new Promise(r=>site.close(r));fs.rmSync(dir,{recursive:true,force:true});
  }
 }
 main().catch(error=>{console.error(error);process.exitCode=1});

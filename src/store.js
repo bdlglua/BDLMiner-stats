@@ -67,11 +67,14 @@ export class Store {
 
   // false when refused: too many reports from one address.
   add(report, address, now = Date.now()) {
-    const seen = this.addresses.get(address);
+    // A TCP relay does not preserve the client address. Its native adapter
+    // passes null and applies a server-wide admission limit instead of making
+    // every miner share one IP limit or trusting a client-supplied header.
+    const seen = address === null ? null : this.addresses.get(address);
     if (seen && seen.until > now) {
       if (seen.count >= PER_ADDRESS_HOUR) return false;
       seen.count++;
-    } else {
+    } else if (address !== null) {
       this.addresses.set(address, { count: 1, until: now + HOUR });
       if (this.addresses.size > 10000) for (const [a, s] of this.addresses) if (s.until <= now) this.addresses.delete(a);
     }
@@ -87,7 +90,7 @@ export class Store {
     // version that says its interval, i.e. 1.9.2 or later.
     for (const r of this.live) {
       const sender = this.senders.get(r);
-      const same = sender === address || (sender === undefined && report.every !== undefined && r.every === DEFAULT_EVERY);
+      const same = (address !== null && sender === address) || (sender === undefined && report.every !== undefined && r.every === DEFAULT_EVERY);
       if (r.board === board && r.v !== v && same && r.t + r.every * 1000 > now) r.every = Math.max(1, (now - r.t) / 1000);
     }
     const entry = { t: now, every, v, board, hashrate, ...(validCoin(coin) ? { coin } : {}), ...(model ? { model } : {}),

@@ -135,6 +135,12 @@ and the reports cannot be authenticated (the firmware is open source).
 
 ## Setup
 
+For the existing pool server, see [self-hosted installation](server/README.md).
+It runs the same collection and private-monitoring contracts with local SQLite,
+behind the current Caddy/OpenPort API host. Install and verify it before changing
+the website and firmware endpoints; existing devices still use their embedded
+Worker address until updated.
+
 1. **Cloudflare**: the same free account as any other Worker; note the *Account ID* and
    create an API token from the *Edit Cloudflare Workers* template.
 2. **GitHub** (Settings → Secrets and variables → Actions → secrets):

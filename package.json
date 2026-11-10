@@ -10,7 +10,8 @@
   },
   "scripts": {
     "test": "node --test",
-    "test:browser": "node scripts/remote-browser.cjs"
+    "test:browser": "node scripts/remote-browser.cjs",
+    "test:selfhost:browser": "BDL_SELF_HOSTED=1 node scripts/remote-browser.cjs"
   },
   "devDependencies": {
     "playwright": "1.56.1",
