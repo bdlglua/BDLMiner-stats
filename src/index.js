@@ -7,6 +7,7 @@ import { parseReport } from "./store.js";
 import { PAGE } from "./page.js";
 import { parseRemote, remoteKey, remoteMode } from './remote.js';
 import { REMOTE_PAGE, REMOTE_APP, REMOTE_STYLE } from './remote-page.js';
+import { relay } from './relay.js';
 
 const MAX_BODY = 512;
 
@@ -129,6 +130,14 @@ function headers(env, type) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (env.SELF_HOSTED_ORIGIN) {
+      const cors = url.pathname.startsWith('/api/remote') ? remoteCors(request, env, url) : null;
+      if (cors?.error) return cors.error;
+      const response = await relay(request, env.SELF_HOSTED_ORIGIN, viewerOrigins(env));
+      for (const [name, value] of Object.entries(cors?.headers ?? {})) response.headers.set(name, value);
+      return response;
+    }
 
     if (url.pathname.startsWith('/api/remote')) {
       const cors = remoteCors(request, env, url);

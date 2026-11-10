@@ -67,6 +67,15 @@ update to remove that dependency. A temporary Worker proxy could bridge old
 devices, but would still consume Worker request quota. A site-only change does
 not move those report senders.
 
+The current Worker configuration enables that compatibility proxy with
+`SELF_HOSTED_ORIGIN=https://api.bdl-pool.com:36018`. Already installed firmware
+keeps working while its accepted readings are stored on the native server.
+The website and newly built firmware use the server directly. The bridge
+does not access the old Durable Objects; old Worker databases are left intact.
+Its Worker request allowance still applies to legacy devices until updated.
+Local Worker browser tests explicitly disable the proxy, so simulated reports
+remain on loopback and never reach the production collector.
+
 ## Operations and limits
 
 ```sh

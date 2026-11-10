@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { REMOTE_PAGE, REMOTE_APP, REMOTE_STYLE } from './remote-page.js';
 
-export const REMOTE_API_ORIGIN = 'https://bdlminer-stats.bdlminer-bot.workers.dev';
+export const REMOTE_API_ORIGIN = 'https://api.bdl-pool.com:36018';
 const digest = text => createHash('sha256').update(text).digest('hex').slice(0, 12);
 export function remoteFiles(apiOrigin = REMOTE_API_ORIGIN) {
   const url = new URL(apiOrigin);

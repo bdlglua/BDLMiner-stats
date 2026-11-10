@@ -14,7 +14,7 @@ async function main(){
  await new Promise(r=>site.listen(0,'127.0.0.1',r));const siteURL='http://127.0.0.1:'+site.address().port;
  const native=process.env.BDL_SELF_HOSTED==='1';let collector,child,logs='';
  if(native){const {createCollector}=await import('../server/http.js');collector=createCollector({directory:dir,publicOrigin:url,viewerOrigins:siteURL});await new Promise(r=>collector.server.listen(port,'127.0.0.1',r))}
- else{child=spawn(path.resolve('node_modules/.bin/wrangler'),['dev','--local','--ip','127.0.0.1','--port',String(port),'--inspector-port',String(inspect),'--persist-to',dir,'--var','REMOTE_VIEWER_ORIGIN:'+siteURL,'--var','REMOTE_VIEWER_REDIRECT:true'],{env:{...process.env,WRANGLER_SEND_METRICS:'false'},stdio:['ignore','pipe','pipe']});for(const stream of [child.stdout,child.stderr])stream.on('data',chunk=>logs+=chunk)}
+ else{child=spawn(path.resolve('node_modules/.bin/wrangler'),['dev','--local','--ip','127.0.0.1','--port',String(port),'--inspector-port',String(inspect),'--persist-to',dir,'--var','REMOTE_VIEWER_ORIGIN:'+siteURL,'--var','REMOTE_VIEWER_REDIRECT:true','--var','SELF_HOSTED_ORIGIN:'],{env:{...process.env,WRANGLER_SEND_METRICS:'false'},stdio:['ignore','pipe','pipe']});for(const stream of [child.stdout,child.stderr])stream.on('data',chunk=>logs+=chunk)}
  let browser;
  try{
   const ready=Date.now()+45000;let active=false;

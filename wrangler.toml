@@ -5,6 +5,9 @@ workers_dev = true
 logpush = false
 
 [vars]
+# Compatibility for already installed firmware. Storage and current clients
+# use the native collector; workers.dev still has its own request allowance.
+SELF_HOSTED_ORIGIN = "https://api.bdl-pool.com:36018"
 # Space-separated; the first is the address legacy links open.
 REMOTE_VIEWER_ORIGIN = "https://miner.bdl-pool.com https://bdlglua.github.io"
 # Legacy bookmarks and existing firmware links open the GitHub Pages viewer.

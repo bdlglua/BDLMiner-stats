@@ -4,6 +4,13 @@ The total hashrate of the [BDLMiner](https://github.com/bdlglua/BDLMinerV2) mine
 that share it, and a public page to follow it:
 **<https://bdlminer-stats.bdlminer-bot.workers.dev/>**
 
+Production collection and private monitoring now use
+**<https://api.bdl-pool.com:36018>**, backed by local SQLite on the pool server.
+The website reads it directly. The old Worker is a compatibility proxy for
+already installed firmware; it no longer stores new reports in Durable Objects.
+Those devices still consume Worker request allowance until updated. See
+[installation and migration details](server/README.md).
+
 Miners with the *Share my hashrate anonymously* setting (on by default since
 BDLMiner 1.9.0) post a report every 5 minutes (1.9.0 and 1.9.1: once an hour, without
 `every`):
