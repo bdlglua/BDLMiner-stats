@@ -38,7 +38,11 @@ devices and records without the setting; saved disabled choices are preserved.
 Owners can switch it off independently. It requires hashrate sharing and
 an active pool connection. A fixed allowlist maps public hosts and their
 subdomains to `public-pool.io`, `nerdminers.org`, `nerdminer.io`, `ckpool.org`,
-`ocean.xyz`, `braiins.com`, `viabtc.com`, `f2pool.com` or `antpool.com`.
+`ocean.xyz`, `braiins.com`, `viabtc.com`, `f2pool.com`, `antpool.com`,
+`bdl-pool.com`, `solopool.org`, `kano.is`, `atlaspool.io`, `solomining.de`,
+`satoshiradio.nl`, `noderunners.network`, `d-central.tech`, `mining-dutch.nl`,
+`luxor.tech`, `nicehash.com`, `secpool.com`, `spiderpool.com`, `hmpool.io`,
+`molepool.com` or `peermining.org`.
 Other hosts, including local/private endpoints, become `other` on the device.
 The configured hostname, URL, port, Bitcoin address and worker are never sent.
 The collector accepts only these finite groups; raw endpoints are rejected.
