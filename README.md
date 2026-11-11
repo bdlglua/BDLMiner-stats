@@ -11,6 +11,12 @@ already installed firmware; it no longer stores new reports in Durable Objects.
 Those devices still consume Worker request allowance until updated. See
 [installation and migration details](server/README.md).
 
+The replacement native runtime is `rust/`; the compatibility Worker is Rust/WASM
+in `bridge/`. Their application code contains no authored JavaScript. Existing JS
+modules remain compatibility oracles and rollback sources. Server activation is
+verified separately with `/healthz` reporting `runtime: "rust"`; publishing the
+websites or Worker does not restart the native server.
+
 Miners with the *Share my hashrate anonymously* setting (on by default since
 BDLMiner 1.9.0) post a report every 5 minutes (1.9.0 and 1.9.1: once an hour, without
 `every`):

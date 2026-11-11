@@ -9,9 +9,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test",
-    "test:browser": "node scripts/remote-browser.cjs",
-    "test:selfhost:browser": "BDL_SELF_HOSTED=1 node scripts/remote-browser.cjs"
+    "test": "node --test test/*.test.js",
+    "test:browser": "node scripts/rust-browser.cjs",
+    "test:selfhost:browser": "node scripts/rust-browser.cjs",
+    "test:rust": "cargo test --locked --manifest-path rust/Cargo.toml",
+    "test:bridge": "node scripts/test-bridge.mjs"
   },
   "devDependencies": {
     "playwright": "1.56.1",

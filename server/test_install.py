@@ -39,37 +39,13 @@ class InstallTests(unittest.TestCase):
         self.assertNotIn('/api/*', text)
         self.assertNotIn('tls ', text)
 
-    def test_official_node_archive_is_selected_for_arm_and_x86_only(self):
-        sums = '\n'.join('a'*64+'  node-v24.14.1-linux-'+arch+'.tar.xz' for arch in ('x64', 'arm64'))
-        self.assertIn('linux-arm64', installer.node_archive(sums, 'aarch64')[1])
-        self.assertIn('linux-x64', installer.node_archive(sums, 'x86_64')[1])
-        for body, machine in ((sums, 'unknown'), ('a'*64+' node-v25.1.1-linux-x64.tar.xz', 'x86_64')):
-            with self.assertRaises(installer.InstallError):
-                installer.node_archive(body, machine)
 
-    def test_archive_paths_links_and_owners_cannot_escape_runtime(self):
-        for name, link in (('node-v24.test/../escape', None), ('/etc/escape', None),
-                           ('node-v24.test/bin/node', '/etc/passwd'), ('node-v24.test/bin/node', '../../escape')):
-            with tempfile.TemporaryDirectory() as folder:
-                root = Path(folder)
-                archive = root/'node.tar.xz'
-                with tarfile.open(archive, 'w:xz') as bundle:
-                    member = tarfile.TarInfo(name)
-                    if link:
-                        member.type = tarfile.SYMTYPE
-                        member.linkname = link
-                        bundle.addfile(member)
-                    else:
-                        member.size = 4
-                        bundle.addfile(member, io.BytesIO(b'test'))
-                destination = root/'runtime'
-                destination.mkdir()
-                with self.assertRaises(installer.InstallError):
-                    installer.extract_node(archive, destination, 'node-v24.test')
 
     def test_service_is_isolated_and_only_backup_public_data(self):
         unit = installer.service('https://api.bdl-pool.com:36018')
         self.assertIn('User=bdlminer-stats', unit)
+        self.assertIn('ExecStart=/opt/bdlminer-stats/app/bdlminer-stats', unit)
+        self.assertNotIn('node/bin/node', unit)
         self.assertIn('ProtectHome=true', unit)
         self.assertIn('StateDirectoryMode=0700', unit)
         self.assertNotIn('ckpool', unit)

@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Install the native collector alongside the existing pool API, as root."""
 import fcntl
-import hashlib
 import http.client
 import json
 import os
-from pathlib import Path, PurePosixPath
-import platform
+from pathlib import Path
 import pwd
 import re
 import shutil
@@ -14,8 +12,6 @@ import socket
 import ssl
 import subprocess
 import sys
-import tarfile
-import tempfile
 import time
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -109,79 +105,15 @@ handle @bdlminer_stats {
 '''
 
 
-def node_archive(checksums, machine):
-    architecture = {'x86_64': 'x64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(machine)
-    if not architecture:
-        raise InstallError('Architecture non prise en charge : '+machine)
-    pattern = r'([a-f0-9]{64})\s+(node-v24\.\d+\.\d+-linux-'+architecture+r'\.tar\.xz)'
-    matches = re.findall(pattern, checksums)
-    if len(matches) != 1:
-        raise InstallError('Archive officielle Node.js 24 LTS introuvable.')
-    return matches[0]
 
 
-def extract_node(archive, destination, basename):
-    # Ignore archive ownership; never write through an absolute/traversing link.
-    with tarfile.open(archive, 'r:xz') as bundle:
-        for member in bundle:
-            parts = PurePosixPath(member.name).parts
-            if not parts or parts[0] != basename or '..' in parts or member.name.startswith('/'):
-                raise InstallError('Chemin inattendu dans l’archive Node.js.')
-            target = destination.joinpath(*parts[1:])
-            if not target.resolve().is_relative_to(destination.resolve()):
-                raise InstallError('Lien hors de l’archive Node.js.')
-            if member.isdir():
-                target.mkdir(parents=True, exist_ok=True)
-                target.chmod(0o755)
-            elif member.isfile():
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with bundle.extractfile(member) as source, target.open('wb') as output:
-                    shutil.copyfileobj(source, output)
-                target.chmod(0o755 if member.mode & 0o111 else 0o644)
-            elif member.issym():
-                if Path(member.linkname).is_absolute() or not (target.parent/member.linkname).resolve().is_relative_to(destination.resolve()):
-                    raise InstallError('Lien inattendu dans Node.js.')
-                target.symlink_to(member.linkname)
-            else:
-                raise InstallError('Entrée inattendue dans Node.js.')
 
 
-def install_node():
-    binary = ROOT/'node/bin/node'
-    if binary.is_file():
-        version = run([binary, '-p', 'process.versions.node']).strip()
-        if re.fullmatch(r'24\.\d+\.\d+', version):
-            return binary
-        raise InstallError('Le runtime existant n’est pas Node.js 24. Configuration conservée.')
-    print('Installation isolée de Node.js 24 LTS (sans modifier le Node.js système).', flush=True)
-    base = 'https://nodejs.org/dist/latest-v24.x/'
-    checksum, filename = node_archive(download(base+'SHASUMS256.txt', 131072).decode(), platform.machine())
-    payload = download(base+filename, 128*1024*1024)
-    if hashlib.sha256(payload).hexdigest() != checksum:
-        raise InstallError('Somme de contrôle Node.js incorrecte.')
-    runtimes = ROOT/'runtimes'
-    runtimes.mkdir(exist_ok=True)
-    runtimes.chmod(0o755)
-    with tempfile.TemporaryDirectory(dir=runtimes) as folder:
-        folder = Path(folder)
-        archive = folder/'node.tar.xz'
-        archive.write_bytes(payload)
-        extracted = folder/'runtime'
-        extracted.mkdir(mode=0o755)
-        basename = filename.removesuffix('.tar.xz')
-        extract_node(archive, extracted, basename)
-        destination = runtimes/basename
-        if destination.exists():
-            raise InstallError('Dossier runtime déjà présent. Aucune suppression automatique.')
-        extracted.rename(destination)
-    (ROOT/'node').symlink_to(destination)
-    run([binary, '--input-type=module', '-e', 'import {DatabaseSync} from "node:sqlite"; new DatabaseSync(":memory:").close()'])
-    return binary
 
 
 def service(origin):
     return '''[Unit]
-Description=BDLMiner local statistics collector
+Description=BDLMiner Rust statistics collector
 After=network.target
 StartLimitIntervalSec=0
 
@@ -190,7 +122,7 @@ Type=simple
 User=bdlminer-stats
 Group=bdlminer-stats
 WorkingDirectory=/opt/bdlminer-stats/app
-ExecStart=/opt/bdlminer-stats/node/bin/node /opt/bdlminer-stats/app/server/main.js
+ExecStart=/opt/bdlminer-stats/app/bdlminer-stats
 Environment=STATS_DATA=/var/lib/bdlminer-stats
 Environment=STATS_PUBLIC_ORIGIN='''+origin+'''
 EnvironmentFile=-/etc/bdlminer-stats.conf
@@ -227,7 +159,7 @@ After=bdlminer-stats.service
 Type=oneshot
 User=bdlminer-stats
 Group=bdlminer-stats
-ExecStart=/opt/bdlminer-stats/node/bin/node /opt/bdlminer-stats/app/server/backup.js
+ExecStart=/opt/bdlminer-stats/app/bdlminer-stats backup
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
@@ -264,7 +196,7 @@ def wait_native():
     deadline = time.monotonic()+30
     while time.monotonic() < deadline:
         try:
-            if local_json('/healthz').get('service') == 'bdlminer-stats':
+            if local_json('/healthz').get('runtime') == 'rust':
                 return
         except (OSError, ValueError, InstallError, http.client.HTTPException):
             pass
@@ -296,7 +228,7 @@ def install():
         raise InstallError('Le port local 8787 est occupé. Aucun service arrêté.')
     ROOT.mkdir(parents=True, exist_ok=True)
     ROOT.chmod(0o755)
-    node = install_node()
+
     try:
         account = pwd.getpwnam(USER)
     except KeyError:
@@ -326,14 +258,12 @@ def install():
     release = releases/str(time.time_ns())
     release.mkdir(mode=0o755)
     source = Path(__file__).resolve().parent.parent
-    for folder in ('src', 'server'):
-        for path in (source/folder).rglob('*.js'):
-            destination = release/path.relative_to(source)
-            write(destination, path.read_bytes())
-    write(release/'package.json', (source/'package.json').read_bytes())
+    binary = source/'rust/target/release/bdlminer-stats'
+    if binary.is_symlink() or not binary.is_file():
+        raise InstallError('Compiler d’abord : cargo build --locked --release --manifest-path rust/Cargo.toml')
+    write(release/'bdlminer-stats', binary.read_bytes(), 0o755)
     if (source/'LICENSE').is_file():
         write(release/'LICENSE', (source/'LICENSE').read_bytes())
-    run([node, '--check', release/'server/main.js'])
     backup_directory = Path('/var/backups/bdlminer-stats/public')
     backup_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     backup_directory.parent.chmod(0o755)
@@ -374,7 +304,7 @@ WantedBy=timers.target
         write(FRAGMENT, fragment)
         run(['runuser', '-u', 'caddy', '--', 'caddy', 'validate', '--config', '/etc/caddy/Caddyfile'], 'Validation de Caddy')
         run(['systemctl', 'reload', 'caddy.service'], 'Activation des routes HTTPS des statistiques')
-        if local_json('/healthz', host).get('service') != 'bdlminer-stats' or local_json('/api/v1/health', host).get('status') != 'ok':
+        if local_json('/healthz', host).get('runtime') != 'rust' or local_json('/api/v1/health', host).get('status') != 'ok':
             raise InstallError('Contrôle HTTPS local non confirmé.')
         run(['systemctl', 'enable', 'bdlminer-stats.service'])
         run(['systemctl', 'start', 'bdlminer-stats-backup.service'])

@@ -1,7 +1,7 @@
 # Self-hosted statistics
 
-Node.js 24 LTS and SQLite run the same public and private report handlers as
-the Worker. There are no npm production dependencies. `127.0.0.1:8787` is
+The native Rust binary in `rust/` implements public and private report handlers
+with Axum and SQLite. No Node runtime is used by the Rust service. `127.0.0.1:8787` is
 reachable through the **existing** pool API Caddy host and OpenPort HTTPS
 relay. Mining, Bitcoin Core, certificates, DNS and relay identities are not
 modified. No inbound router port is required.
@@ -12,14 +12,16 @@ Run with the `bdl` account:
 
 ```sh
 git clone https://github.com/bdlglua/BDLMiner-stats.git /home/bdl/bdlminer-stats
+cargo build --locked --release --manifest-path /home/bdl/bdlminer-stats/rust/Cargo.toml
 sudo python3 /home/bdl/bdlminer-stats/server/install.py
 ```
 
 For an existing checkout, use `git -C /home/bdl/bdlminer-stats pull --ff-only`
 before running the installer again. The installer requires the existing
 `/etc/bdl-pool-openport/public.json` and pool API Caddy fragment. It installs
-an isolated, checksum-verified official Node.js 24 runtime for x64/ARM64;
-system Node.js is left unchanged. Code is root-owned in `/opt/bdlminer-stats`.
+the binary compiled locally for the server architecture. Code is root-owned in
+`/opt/bdlminer-stats`. The small Python installer only manages files, privileges,
+systemd, Caddy and rollback; it is not part of the HTTP runtime.
 The `bdlminer-stats` service account owns only `/var/lib/bdlminer-stats` and
 the public-backup directory. Installation validates Caddy as the Caddy user,
 checks both APIs over local verified HTTPS, and restores the previous routes
@@ -39,7 +41,18 @@ inside its existing Caddy host; `/etc/caddy/bdlminer-routes/stats.caddy`
 contains only the additional paths. Pool reinstallation/domain helpers must
 preserve `import /etc/caddy/bdlminer-routes/*.caddy` inside that host.
 
-## Cutover and historical data
+## Rust cutover with existing SQLite data
+
+Stop/restart only `bdlminer-stats.service` through the installer after building
+Rust on the server. Its previous application symlink and unit are retained for
+rollback. `public.sqlite` and `private/<sha256>.sqlite` keep their existing schemas,
+reports, hourly archive and revocation tombstones. The Rust health endpoint must
+return `runtime: "rust"`; the installer checks this before declaring success.
+A static-site or compatibility-Worker deployment cannot perform this cutover.
+The previous JS implementation remains in the repository for regression oracles
+and rollback until server activation has been verified.
+
+## Initial deployment and historical data
 
 **Installation prepares the new endpoint; it does not change the live website,
 Worker configuration, firmware or current firmware releases.** Verify the
@@ -73,8 +86,9 @@ keeps working while its accepted readings are stored on the native server.
 The website and newly built firmware use the server directly. The bridge
 does not access the old Durable Objects; old Worker databases are left intact.
 Its Worker request allowance still applies to legacy devices until updated.
-Local Worker browser tests explicitly disable the proxy, so simulated reports
-remain on loopback and never reach the production collector.
+The Rust bridge in `bridge/` preserves the Worker classes/namespaces without
+opening or changing their archived storage. Its guard tests disable upstream
+access. The previous implementation is kept as a reference.
 
 ## Operations and limits
 
@@ -89,7 +103,7 @@ Capacity depends on CPU, disk, connectivity and OpenPort's own availability and
 terms. Default local admission limits are 1,200 requests/minute and 300 report
 requests/minute, protecting this shared server. They are adjustable, not a
 billing allowance. Private spaces are capped at 2,048, each with the existing
-32-miner limit; at most 32 SQLite connections stay open. Valid unknown reads
+32-miner limit; private SQLite connections are opened per serialized request and then closed. Valid unknown reads
 do not allocate a database. A revoked key keeps a small permanent tombstone.
 
 Set overrides in a root-owned `/etc/bdlminer-stats.conf`, then restart only
@@ -116,11 +130,16 @@ service restarts and database-cache eviction.
 ## Development
 
 ```sh
-npm test
+cargo test --locked --manifest-path rust/Cargo.toml
+cargo clippy --locked --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+node scripts/compare-rust.mjs
+# Export the miner website first, then exercise the two real Rust runtimes:
+BDL_SITE_ROOT=../BDLMinerV2/dist npm run test:selfhost:browser
 python3 -m unittest discover -s server -p 'test_*.py'
-npm run test:selfhost:browser
 ```
 
-The browser suite uses the real local native collector and SQLite, including
-CORS, charts, wallet access, revocation and logout races. The original Worker
-browser suite remains available with `npm run test:browser`.
+Native contracts cover interval weighting, real zero readings, old SQLite schema
+compatibility, key/address isolation, CORS, revocation, storage capacity, HTTP
+limits and online public-only WAL backup. A differential oracle compares complete
+summaries with the previous Node collector on seven deterministic scenarios.
+`npm test` retains the previous implementation's tests as a reference.

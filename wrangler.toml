@@ -1,5 +1,5 @@
 name = "bdlminer-stats"
-main = "src/worker.js"
+main = "bridge/build/index.js"
 compatibility_date = "2026-09-01"
 workers_dev = true
 logpush = false
@@ -33,3 +33,6 @@ new_sqlite_classes = ["RemoteStore"]
 [observability]
 # Private bearer keys and request metadata must not enter invocation logs.
 enabled = false
+
+[build]
+command = "worker-build --release bridge"
