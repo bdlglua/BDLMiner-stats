@@ -89,5 +89,6 @@ not replace the live endpoint.
 `server/`, `rust/` and `bridge/` are historical self-hosted SQLite/Worker
 implementations retained for reference and regression tests. Do not install
 them for production. The former VPS and Cloudflare compatibility Worker are
-not required. Firmware older than 2.6.3 must be updated; no relay forwards its
-legacy `api.bdl-pool.com:36018` reports. Bitcoin pool/Stratum APIs are separate.
+not required. Firmware older than 2.6.3 must be updated for public anonymous reports;
+firmware older than 2.6.4 must be updated for private remote monitoring. No relay
+forwards legacy `api.bdl-pool.com:36018` requests. Bitcoin pool/Stratum APIs are separate.
