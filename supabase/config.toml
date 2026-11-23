@@ -1,4 +1,7 @@
-# Public anonymous miner reports use an opt-in, unauthenticated endpoint.
-# The handler validates requests and writes only through privileged RPCs.
+# Public reports are anonymous; private monitoring validates its own
+# Address/Bearer authorization in the Edge Function.
 [functions.bdl-public-stats]
+verify_jwt = false
+
+[functions.bdl-remote-stats]
 verify_jwt = false
