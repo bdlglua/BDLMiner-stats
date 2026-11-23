@@ -83,13 +83,13 @@ $$;
 -- Does not claim miner identification, exact offline counts, or pool payouts.
 create or replace function public.bdl_stats_summary()
 returns jsonb language sql volatile security invoker set search_path = '' as $$
-with current_time as (select clock_timestamp() as ts),
+with clock_cte as (select clock_timestamp() as ts),
 active as (
-  select r.* from public.bdl_stats_reports r cross join current_time n
+  select r.* from public.bdl_stats_reports r cross join clock_cte n
   where r.received_at <= n.ts
     and r.received_at + make_interval(secs => r.every_s) > n.ts
 ),
-groups as (
+category_groups as (
  select 'boards' as category, board as name, count(*)::int as miners, sum(hashrate)::double precision as hashrate from active group by board
  union all select 'versions', version, count(*)::int, sum(hashrate)::double precision from active group by version
  union all select 'coins',coin,count(*)::int,sum(hashrate)::double precision from active group by coin
@@ -100,11 +100,11 @@ models as (
  from active group by board,model
 ),
 last_day as (
- select s.sampled_at,s.hashrate,s.miners from public.bdl_stats_samples s, current_time n
+ select s.sampled_at,s.hashrate,s.miners from public.bdl_stats_samples s, clock_cte n
  where s.sampled_at >= n.ts - interval '24 hours'
 ),
 weekly as (
- select s.sampled_at,s.hashrate,s.miners from public.bdl_stats_samples s, current_time n
+ select s.sampled_at,s.hashrate,s.miners from public.bdl_stats_samples s, clock_cte n
  where s.sampled_at >= n.ts - interval '7 days'
 ),
 hourly as (
@@ -118,13 +118,13 @@ known_boards as (
   where received_at >= clock_timestamp() - interval '7 days'
 )
 select jsonb_build_object(
- 'at', floor(extract(epoch from (select ts from current_time))*1000)::bigint,
+ 'at', floor(extract(epoch from (select ts from clock_cte))*1000)::bigint,
  'hashrate', coalesce((select sum(hashrate) from active),0),
  'miners', (select count(*) from active),
- 'boards', coalesce((select jsonb_agg(jsonb_build_object('name',name,'hashrate',hashrate,'miners',miners) order by hashrate desc) from groups where category='boards'),'[]'::jsonb),
- 'versions', coalesce((select jsonb_agg(jsonb_build_object('name',name,'hashrate',hashrate,'miners',miners) order by hashrate desc) from groups where category='versions'),'[]'::jsonb),
- 'coins', coalesce((select jsonb_agg(jsonb_build_object('name',name,'hashrate',hashrate,'miners',miners) order by hashrate desc) from groups where category='coins'),'[]'::jsonb),
- 'pools', coalesce((select jsonb_agg(jsonb_build_object('name',name,'hashrate',hashrate,'miners',miners) order by hashrate desc) from groups where category='pools'),'[]'::jsonb),
+ 'boards', coalesce((select jsonb_agg(jsonb_build_object('name',name,'hashrate',hashrate,'miners',miners) order by hashrate desc) from category_groups where category='boards'),'[]'::jsonb),
+ 'versions', coalesce((select jsonb_agg(jsonb_build_object('name',name,'hashrate',hashrate,'miners',miners) order by hashrate desc) from category_groups where category='versions'),'[]'::jsonb),
+ 'coins', coalesce((select jsonb_agg(jsonb_build_object('name',name,'hashrate',hashrate,'miners',miners) order by hashrate desc) from category_groups where category='coins'),'[]'::jsonb),
+ 'pools', coalesce((select jsonb_agg(jsonb_build_object('name',name,'hashrate',hashrate,'miners',miners) order by hashrate desc) from category_groups where category='pools'),'[]'::jsonb),
  'models', coalesce((select jsonb_agg(jsonb_build_object('board',board,'model',model,'miners',miners,'hashrate',hashrate)) from models),'[]'::jsonb),
  'fleet', coalesce((select jsonb_agg(jsonb_build_object('board',b.board,'online',(select count(*) from active a where a.board=b.board),'offline',0)) from known_boards b),'[]'::jsonb),
  'recent', coalesce((select jsonb_agg(jsonb_build_object('at',floor(extract(epoch from sampled_at)*1000)::bigint,'hashrate',hashrate,'miners',miners,'missing',false) order by sampled_at) from last_day),'[]'::jsonb),
