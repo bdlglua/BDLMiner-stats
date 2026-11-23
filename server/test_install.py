@@ -36,6 +36,12 @@ class InstallTests(unittest.TestCase):
         self.assertIn('/api/remote/*', text)
         self.assertIn('/api/summary', text)
         self.assertIn('reverse_proxy 127.0.0.1:8787', text)
+        self.assertIn('@bdlminer_old_report path /report', text)
+        self.assertIn('rewrite * /functions/v1/bdl-public-stats/report', text)
+        self.assertIn('reverse_proxy https://cqbvuzubjkxfsztzfzso.supabase.co', text)
+        self.assertIn('header_up -Authorization', text)
+        self.assertIn('header_up -Cookie', text)
+        self.assertNotIn('@bdlminer_stats path /report', text)
         self.assertNotIn('/api/*', text)
         self.assertNotIn('tls ', text)
 

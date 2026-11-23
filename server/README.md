@@ -36,6 +36,44 @@ Expected addresses with the current relay:
 * `https://api.bdl-pool.com:36018/api/remote/report`
 * `https://api.bdl-pool.com:36018/api/remote/history`
 
+## Legacy anonymous report relay to Supabase
+
+After applying this installer update, Caddy forwards **only** legacy `POST /report` requests to
+`https://cqbvuzubjkxfsztzfzso.supabase.co/functions/v1/bdl-public-stats/report`.
+This preserves statistics from older firmwares that still post to
+`https://api.bdl-pool.com:36018/report` (and from the old Cloudflare Worker
+which proxies to that URL). No firmware update is required to keep counting
+these miners in the new Supabase totals.
+
+Caddy rewrites only the request path, uses TLS verification for the fixed
+Supabase host, strips incoming Authorization and Cookie headers, and passes
+the Supabase status to the client. The Supabase function is intentionally
+public and separately validates/rate-limits anonymous reports. The **local
+`/api/summary` remains SQLite-backed and does not automatically reflect
+reports sent through the relay**; the public website reads Supabase. The
+private `/api/remote/*`, `/healthz`, Bitcoin pool `/api/v1/*`, and
+other Caddy routes remain on their original upstreams.
+
+### Activation and validation
+
+After the change has been reviewed and merged, on the **pool server**:
+
+```sh
+git -C /home/bdl/bdlminer-stats pull --ff-only
+cargo build --locked --release --manifest-path /home/bdl/bdlminer-stats/rust/Cargo.toml
+sudo python3 /home/bdl/bdlminer-stats/server/install.py
+sudo runuser -u caddy -- caddy validate --config /etc/caddy/Caddyfile
+curl -fsS https://api.bdl-pool.com:36018/healthz
+curl -fsS https://api.bdl-pool.com:36018/api/v1/health
+curl -fsS https://cqbvuzubjkxfsztzfzso.supabase.co/functions/v1/bdl-public-stats/api/summary
+```
+
+Confirm a real **legacy-version** miner contributes to Supabase while
+`/api/remote` and pool APIs still work. Avoid synthetic valid reports on
+the public database. The installer saves the previous Caddy fragment and
+restores it if validation/activation fails. For runtime rollback, restore
+the previous `stats.caddy` from the installer's backup and reload Caddy.
+
 The pool's `/api/v1/*` routes stay on port 8081. The installer adds an import
 inside its existing Caddy host; `/etc/caddy/bdlminer-routes/stats.caddy`
 contains only the additional paths. Pool reinstallation/domain helpers must
