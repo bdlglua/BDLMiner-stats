@@ -58,17 +58,25 @@ never enters the anonymous public aggregate.
 
 ## Supabase schema and scheduled jobs
 
-Migrations:
+Production migration history (the filenames must remain aligned with
+`supabase_migrations.schema_migrations` so `supabase db push` does not try to
+replay migrations already applied to production):
 
-- `supabase/migrations/20261123000000_bdl_public_stats.sql` — public reports,
-  aggregate samples, summary RPC and five-minute sampling.
-- `supabase/migrations/20261123145600_bdl_private_remote_stats.sql` — private
-  spaces, miner reports, seven-day history, authorization-scoped RPCs and pruning.
+- `20261123122154_bdl_public_stats_initial.sql` — public reports, aggregate
+  samples, summary RPC and public-statistics schema.
+- `20261123122257_enable_bdl_stats_cron.sql` — five-minute public sampling job.
+- `20261123122326_enable_bdl_stats_endpoint_checks.sql` — endpoint checks.
+- `20261123150200_bdl_private_remote_stats.sql` — private spaces, miner reports,
+  seven-day history, authorization-scoped RPCs and pruning.
+- `20261123150848_bdl_remote_ingest_concurrency.sql` — atomic private ingest
+  admission and concurrency controls.
+- `20261123151525_revoke_public_rls_auto_enable.sql` — restricts execution of
+  the RLS auto-enable event-trigger function while retaining the trigger.
 
 Active scheduled jobs:
 
 - `bdl-public-stats-5min` — `public.bdl_stats_sample()` every five minutes.
-- `bdl-private-stats-prune` — `public.bdl_remote_prune()` hourly.
+- `bdl-remote-stats-prune` — `public.bdl_remote_prune()` hourly.
 
 Both functions deliberately have JWT verification disabled at the gateway:
 public anonymous reports carry no account token, while private monitoring
