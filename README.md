@@ -103,7 +103,8 @@ Cloudflare Worker implementations for historical reference and regression
 tests. They are **not part of the production request path** and must not be
 installed or deployed as a prerequisite for the current firmware/site.
 
-Firmware older than 2.6.3 still targets the retired `api.bdl-pool.com:36018`
-service. Update those devices to a Supabase-enabled firmware; there is no
+Firmware older than 2.6.3 still targets the retired public `/report` endpoint;
+firmware older than 2.6.4 still targets the retired private `/api/remote/*`
+endpoints. Update those devices to a Supabase-enabled firmware; there is no
 compatibility relay. Private history from the former SQLite service is not
 automatically imported. The pool/Stratum API is not changed by this project.
