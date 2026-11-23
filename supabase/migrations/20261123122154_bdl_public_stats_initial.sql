@@ -1,4 +1,4 @@
--- BDLMiner public statistics only. Private /remote telemetry is NOT migrated.
+-- BDLMiner anonymous public statistics only. Private telemetry has its own migration.
 -- Anonymous reports cannot identify individual miners. Counts are estimates.
 create table if not exists public.bdl_stats_reports (
   id bigint generated always as identity primary key,
@@ -134,5 +134,4 @@ select jsonb_build_object(
 $$;
 revoke all on function public.bdl_stats_ingest(jsonb),public.bdl_stats_sample(),public.bdl_stats_summary() from public, anon, authenticated;
 grant execute on function public.bdl_stats_ingest(jsonb),public.bdl_stats_sample(),public.bdl_stats_summary() to service_role;
--- Enable Supabase Cron, then schedule from Dashboard:
--- */5 * * * *   select public.bdl_stats_sample();
+-- The five-minute sampler is scheduled by the separate enable_bdl_stats_cron migration.
