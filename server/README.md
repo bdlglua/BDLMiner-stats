@@ -14,7 +14,7 @@ and for regression comparisons. Do not run `install.py`, create the
 `bdlminer-stats.service` unit, or add Caddy routes as part of the current
 statistics deployment.
 
-Firmware older than 2.6.3 still targets the retired
-`api.bdl-pool.com:36018` endpoint. It must be updated; there is no legacy
-forwarding relay. The Bitcoin pool and its Stratum/API service are separate
+Firmware older than 2.6.3 still targets the retired public `/report` endpoint;
+firmware older than 2.6.4 still targets the retired private `/api/remote/*`
+endpoints. They must be updated; there is no legacy forwarding relay. The Bitcoin pool and its Stratum/API service are separate
 and are not affected by this retirement.
