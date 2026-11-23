@@ -59,7 +59,7 @@ secrets, or logs.
 ## Scheduled jobs
 
 - `bdl-public-stats-5min`: samples the public aggregate every five minutes.
-- `bdl-private-stats-prune`: prunes private telemetry older than seven days hourly.
+- `bdl-remote-stats-prune`: prunes private telemetry older than seven days hourly.
 
 The Edge Functions intentionally use `verify_jwt = false` in
 `config.toml`: public reports are anonymous, and private reports implement
