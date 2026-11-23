@@ -1,39 +1,93 @@
-# Experimental Supabase collector for BDLMiner public stats
+# Production Supabase backend for BDLMiner statistics
 
-**Staging only.** Do not switch firmware or the public site before a successful Supabase deployment, data-contract verification and a soak test. The existing production API, Caddy/OpenPort routes and private monitoring remain unchanged.
+The production project is `cqbvuzubjkxfsztzfzso` in `eu-west-1`.
+Both public anonymous statistics and private per-miner telemetry are deployed
+as separate Edge Functions. The old VPS/SQLite collector is not required.
 
-## Deployment
+## Functions
 
-1. Create or select a Supabase project. Do not publish secret keys.
-2. `supabase login` and `supabase link --project-ref <PROJECT_REF>`.
-3. `supabase db push` to apply `supabase/migrations/20261123000000_bdl_public_stats.sql`.
-4. In Supabase Integrations > Cron, enable Cron and schedule SQL `select public.bdl_stats_sample();` on `*/5 * * * *` (UTC). Cron is required for 24-hour and 7-day history.
-5. `supabase functions deploy bdl-public-stats`. Its JWT validation is disabled intentionally: firmware reports contain no Supabase credentials. The handler validates input, the database enforces a global rate cap, and only the Edge Function uses the internal admin client.
-6. Test on the new project before switching the public website or released firmware. All requests below are deliberately made without an API key.
+### `bdl-public-stats`
+
+`https://cqbvuzubjkxfsztzfzso.supabase.co/functions/v1/bdl-public-stats`
+
+- `GET /healthz`
+- `GET /api/summary`
+- `POST /report` (anonymous, validated, 204 on success)
+
+No wallet address, worker, device ID or miner name is accepted in public reports.
+Raw reports are kept 26 hours; five-minute samples are kept 35 days.
+
+### `bdl-remote-stats`
+
+`https://cqbvuzubjkxfsztzfzso.supabase.co/functions/v1/bdl-remote-stats`
+
+- `GET /healthz`
+- `POST /api/remote/report`
+- `GET /api/remote`
+- `GET /api/remote/history?miner=<id>&hours=24`
+- `DELETE /api/remote` (private-key authorization only)
+
+Private authorization is preserved from the firmware:
+
+- `Address <payout-address>` — address-based read/write space.
+- `Bearer <64-character-private-key>` — private read/write space with erase/revoke.
+
+The Edge Function normalizes and SHA-256 hashes the authorization value. The
+plaintext address/key is not written to Postgres or logs. Only pseudonymous
+miner IDs, names and selected telemetry are stored. Private readings are kept
+for seven days; each space supports 32 miners. Global request/report budgets and
+a 60-second per-miner report cooldown are enforced in Postgres.
+
+## Migrations
+
+- `20261123000000_bdl_public_stats.sql`
+- `20261123145600_bdl_private_remote_stats.sql`
+
+Both sets of tables have RLS enabled and no policies for `anon` or
+`authenticated`; table privileges are restricted to `service_role`. Edge
+Functions call narrowly scoped RPCs using their server-side admin client.
+Never expose a service-role key in firmware, browser code, public repository
+secrets, or logs.
+
+## Scheduled jobs
+
+- `bdl-public-stats-5min`: samples the public aggregate every five minutes.
+- `bdl-private-stats-prune`: prunes private telemetry older than seven days hourly.
+
+The Edge Functions intentionally use `verify_jwt = false` in
+`config.toml`: public reports are anonymous, and private reports implement
+their own address/private-key authorization. Do not remove those checks or
+replace them with unauthenticated direct table access.
+
+## Browser origins
+
+The private viewer is hosted at `https://miner.bdl-pool.com` and
+`https://bdlglua.github.io`. The Edge Function validates the Origin header and
+supports preflight for the viewer's Authorization header. The public summary is
+readable by the public website.
+
+## Verification
 
 ```sh
-BASE='https://<PROJECT_REF>.supabase.co/functions/v1/bdl-public-stats'
-curl -fsS "$BASE/healthz"
-curl -fsS "$BASE/api/summary" | jq '{at,miners,hashrate,boards,coins,pools}'
-curl -i -X POST "$BASE/report" -H 'Content-Type: application/json' \
-  -d '{"v":"2.6.1","board":"esp32-headless","hashrate":1020000,"every":300,"coin":"BTC","pool":"other"}'
+BASE='https://cqbvuzubjkxfsztzfzso.supabase.co/functions/v1'
+curl -fsS "$BASE/bdl-public-stats/healthz"
+curl -fsS "$BASE/bdl-public-stats/api/summary" | jq '{at,miners,hashrate}'
+curl -fsS "$BASE/bdl-remote-stats/healthz"
 ```
 
-The POST should return `204`, the GET JSON should include `at`, `hashrate`, `miners`, `boards`, `versions`, `coins`, `pools`, `models`, `fleet`, `recent`, `history`, and `record`. Subsequent Cron samples should populate `recent`. The first sample is not historical data from the old API.
+For a private API test, use a temporary 64-character key, send a valid report,
+read the snapshot/history, revoke the key and confirm the next read returns
+410. Delete test rows afterwards. Never send synthetic reports to the public
+aggregate.
 
-## Compatibility and limitations
+The public statistics snapshot on the GitHub `public-stats` branch is a
+best-effort static fallback generated from the same Supabase summary. It does
+not replace the live endpoint.
 
-- This is a new PostgreSQL collector, **not** a proxy to the old server.
-- The old firmware still sends `https://api.bdl-pool.com:36018/report`. It must be updated or proxied only after staging proves healthy. The public site currently reads `https://api.bdl-pool.com:36018/api/summary`; switch it in a separate follow-up change, after obtaining the project's public reference ID.
-- This uses the existing anonymous JSON report body. No device identifiers or wallet data are stored.
-- Counts are **report-window estimates**, not distinct device identities; a miner reporting twice before its old interval expires can briefly be counted twice. Historical offline fleet counts are not inferred (zero until an accurate model is designed). No authentication of hashrate claims exists; never present these values as independently verified network statistics.
-- The SQL admission cap is 300 accepted reports/minute globally, not protection from denial of service at the Edge Function level. Public ingress and GET traffic can still exhaust Edge Function/free-tier quotas. Monitor usage and configure available provider-level controls before public promotion.
-- Fresh-history startup is expected: the chart is blank until Supabase Cron has produced samples. No old private history is touched.
-- This prototype has not been deployed to a Supabase project or end-to-end tested. Test under real report load before publishing.
+## Legacy
 
-## Production switch after staging
-
-1. Update the public statistics source in `BDLMinerV2/site/browser/src/stats.rs` from the old API to `$BASE/api/summary`, then rebuild and test the Rust WebAssembly site. The GitHub `public-stats` snapshot workflow also needs a new source or should be disabled so stale legacy snapshots do not show.
-2. Update anonymous reporting in `BDLMinerV2/src/share.h` and `BDLMinerV2/firmware-rs/app/src/share.rs` from the old `/report` to `$BASE/report`, build firmware with verified HTTPS, and issue a release. Older installed firmware continues to post to the old API until updated (or an intentional compatibility proxy is deployed).
-3. Never replace the existing `/api/remote` and `/api/remote/report` private-monitoring URLs with this public-stats backend. Those require a separate migration with credentials and privacy tests.
-4. Only after observing real data and valid graphs for 24 hours, consider retiring the old anonymous-report collector. Keep the pool API and mining Stratum untouched.
+`server/`, `rust/` and `bridge/` are historical self-hosted SQLite/Worker
+implementations retained for reference and regression tests. Do not install
+them for production. The former VPS and Cloudflare compatibility Worker are
+not required. Firmware older than 2.6.3 must be updated; no relay forwards its
+legacy `api.bdl-pool.com:36018` reports. Bitcoin pool/Stratum APIs are separate.
