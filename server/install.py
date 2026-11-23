@@ -89,9 +89,26 @@ def caddy_fragment(text, host):
 
 
 def caddy_routes():
-    # This is imported INSIDE the existing API host, not as a second site.
+    # This fragment is imported INSIDE the existing pool API HTTPS host.
+    # Only anonymous legacy /report traffic is redirected to Supabase.
+    # Private monitoring and the pool /api/v1/* routes stay unchanged.
     return '''# Managed by BDLMiner-stats/server/install.py
-@bdlminer_stats path /report /api/summary /api/remote /api/remote/* /healthz /remote /remote/ /remote.js /remote.css
+@bdlminer_old_report path /report
+handle @bdlminer_old_report {
+    rewrite * /functions/v1/bdl-public-stats/report
+    reverse_proxy https://cqbvuzubjkxfsztzfzso.supabase.co {
+        header_up Host cqbvuzubjkxfsztzfzso.supabase.co
+        header_up -Authorization
+        header_up -Cookie
+        header_up -CF-Connecting-IP
+        header_up -X-Real-IP
+        transport http {
+            dial_timeout 3s
+            response_header_timeout 15s
+        }
+    }
+}
+@bdlminer_stats path /api/summary /api/remote /api/remote/* /healthz /remote /remote/ /remote.js /remote.css
 handle @bdlminer_stats {
     reverse_proxy 127.0.0.1:8787 {
         header_up -CF-Connecting-IP
@@ -103,11 +120,6 @@ handle @bdlminer_stats {
     }
 }
 '''
-
-
-
-
-
 
 
 
