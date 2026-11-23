@@ -40,8 +40,15 @@ a 60-second per-miner report cooldown are enforced in Postgres.
 
 ## Migrations
 
-- `20261123000000_bdl_public_stats.sql`
-- `20261123145600_bdl_private_remote_stats.sql`
+The filenames below exactly match the migration versions recorded in the production
+project, so `supabase db push` does not try to replay them:
+
+- `20261123122154_bdl_public_stats_initial.sql`
+- `20261123122257_enable_bdl_stats_cron.sql`
+- `20261123122326_enable_bdl_stats_endpoint_checks.sql`
+- `20261123150200_bdl_private_remote_stats.sql`
+- `20261123150848_bdl_remote_ingest_concurrency.sql`
+- `20261123151525_revoke_public_rls_auto_enable.sql`
 
 Both sets of tables have RLS enabled and no policies for `anon` or
 `authenticated`; table privileges are restricted to `service_role`. Edge
