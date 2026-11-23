@@ -134,5 +134,4 @@ select jsonb_build_object(
 $$;
 revoke all on function public.bdl_stats_ingest(jsonb),public.bdl_stats_sample(),public.bdl_stats_summary() from public, anon, authenticated;
 grant execute on function public.bdl_stats_ingest(jsonb),public.bdl_stats_sample(),public.bdl_stats_summary() to service_role;
--- Enable Supabase Cron, then schedule from Dashboard:
--- */5 * * * *   select public.bdl_stats_sample();
+-- The five-minute sampler is scheduled by the separate enable_bdl_stats_cron migration.
